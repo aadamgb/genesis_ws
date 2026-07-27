@@ -25,11 +25,10 @@ def load_track(track_path):
         "gates_rpy": [g["rpy"] for g in track["gates"]],
         "limits": {k: v for d in track["limits"] for k, v in d.items()},
     }
-
-
 class RaceEnv:
     def __init__(self, num_envs, env_cfg, obs_cfg, reward_cfg, command_cfg, show_viewer=False):
         track = load_track(command_cfg["track_path"])
+        # track = load_track("/home/adame/genesis_ws/misc/fig8.yaml") # TODO: Remove
         env_cfg.update(track["limits"])
 
         self.num_envs = num_envs

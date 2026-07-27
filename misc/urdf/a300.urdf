@@ -2,7 +2,7 @@
 
 <robot name="a300">
 
-  <properties mass="1.21" arm="0.15" kf="4.5e-8" km="5.4e-10" thrust2weight="6.944"  max_speed_kmh="200" gnd_eff_coeff="11.36859" prop_radius="0.089" drag_coeff_xy="9.1785e-7" drag_coeff_z="10.311e-7" dw_coeff_1="2267.18" dw_coeff_2=".16" dw_coeff_3="-.11" />
+  <properties mass="1.21" arm="0.15" kf="4.5e-8" km="5.4e-10" thrust2weight="6.945"  max_speed_kmh="200" gnd_eff_coeff="11.36859" prop_radius="0.089" drag_coeff_xy="9.1785e-7" drag_coeff_z="10.311e-7" dw_coeff_1="2267.18" dw_coeff_2=".16" dw_coeff_3="-.11" />
 
   <link name="base_link"> 
 

@@ -11,7 +11,7 @@ m:  301
 seed: 1
 v: false
 
-log_dir: logs/${task.name}/${e}_${cm}
+log_dir: logs/${task.name}/${cm}_${e}
 
 hydra:
   run:

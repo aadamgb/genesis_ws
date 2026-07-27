@@ -20,7 +20,7 @@ def main(cfg: DictConfig):
     if len(loaded) == 6:
         task_name, env_cfg, obs_cfg, reward_cfg, command_cfg, train_cfg = loaded
     else:
-        # DELETE this else later when all pkls are updated!
+        # TODO: DELETE this later when all pkls are updated!
         env_cfg, obs_cfg, reward_cfg, command_cfg, train_cfg = loaded
         print("Carefulll task name not saved in pck, task is set to hover by defaulet!!")
         task_name = cfg.task.name
