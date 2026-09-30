@@ -33,7 +33,7 @@ env:
   spawn_vertical: 0.3
   spawn_min_height: 0.5
 
-  visualize_target: ${vis}
+  visualize_target: ${v}
   visualize_camera: false
   max_visualize_FPS: 60
 

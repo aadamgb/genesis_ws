@@ -28,7 +28,7 @@ def load_track(track_path):
 class RaceEnv:
     def __init__(self, num_envs, env_cfg, obs_cfg, reward_cfg, command_cfg, show_viewer=False):
         track = load_track(command_cfg["track_path"])
-        # track = load_track("/home/adame/genesis_ws/misc/fig8.yaml") # TODO: Remove
+        # track = load_track("/home/adame/genesis_ws/utils/models/fig8.yaml") # TODO: Remove
         env_cfg.update(track["limits"])
 
         self.num_envs = num_envs
@@ -54,7 +54,7 @@ class RaceEnv:
         self.scene = gs.Scene(
             sim_options=gs.options.SimOptions(dt=self.dt, substeps=5),
             viewer_options=gs.options.ViewerOptions(
-                max_FPS=env_cfg["max_visualize_FPS"],
+                refresh_rate=env_cfg["max_visualize_FPS"],
                 camera_pos=(3.0, 0.0, 3.0),
                 camera_lookat=(0.0, 0.0, 1.0),
                 camera_fov=40,
@@ -67,7 +67,6 @@ class RaceEnv:
                 rendered_envs_idx=list(range(self.rendered_env_num))
                 ),
             rigid_options=gs.options.RigidOptions(
-                dt=self.dt,
                 constraint_solver=gs.constraint_solver.Newton,
                 enable_collision=True,
                 enable_joint_limit=True,
@@ -84,7 +83,7 @@ class RaceEnv:
             for gate_pos, gate_rpy in zip(track["gates_pos"], track["gates_rpy"]):
                 self.scene.add_entity(
                     morph=gs.morphs.Mesh(
-                        file="misc/gate.obj",
+                        file="utils/models/gate.obj",
                         euler=( gate_rpy[0], gate_rpy[1], gate_rpy[2]),
                         pos=tuple(gate_pos),
                         fixed=True,
@@ -129,7 +128,7 @@ class RaceEnv:
         self.inv_base_init_quat = inv_quat(self.base_init_quat)
         self.drone = self.scene.add_entity(
             gs.morphs.Drone(
-                file="misc/urdf/a300.urdf",
+                file="utils/models/urdf/a300.urdf",
                 propellers_spin=(-1, -1, 1, 1)
             )
         )

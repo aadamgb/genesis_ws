@@ -26,9 +26,9 @@ def main(cfg: DictConfig):
     with open(f"{log_dir}/cfgs.pkl", "wb") as f:
         pickle.dump([task.name, env_cfg, obs_cfg, reward_cfg, command_cfg, train_cfg], f)
 
-    if task.name == "hover":
-        from src.env_hover import HoverEnv
-        env = HoverEnv(num_envs=cfg.B, env_cfg=env_cfg, obs_cfg=obs_cfg,
+    if task.name == "goto":
+        from src.env_goto import GotoEnv
+        env = GotoEnv(num_envs=cfg.B, env_cfg=env_cfg, obs_cfg=obs_cfg,
                     reward_cfg=reward_cfg, command_cfg=command_cfg, show_viewer=cfg.v)
     elif task.name == "racing":
         from src.env_racing import RaceEnv

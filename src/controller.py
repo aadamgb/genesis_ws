@@ -15,6 +15,24 @@ from genesis.utils.geom import (
 if TYPE_CHECKING:
     from genesis.engine.entities.drone_entity import DroneEntity
 
+def drone_params(urdf: str) -> dict:
+    """Rotor parameters from the urdf <properties> (kf, km, max_rpm, ...) plus the mass (the links' inertial
+    masses, as Genesis simulates them), hover_rpm and thrust2weight.
+
+    Older urdfs (bros300, bambi) give mass and thrust2weight in <properties> instead of max_rpm; their
+    <properties> mass is kept so they behave as before."""
+    root = ET.parse(urdf).getroot()
+    p = {k: float(v) for k, v in root.find("properties").attrib.items()}
+    p.setdefault("mass", sum(float(m.get("value")) for m in root.iter("mass")))
+
+    p["hover_rpm"] = np.sqrt(9.81 * p["mass"] / 4.0 / p["kf"])
+    if "max_rpm" in p:
+        p["thrust2weight"] = (p["max_rpm"] / p["hover_rpm"]) ** 2
+    else:
+        p["max_rpm"] = p["hover_rpm"] * np.sqrt(p["thrust2weight"])
+    return p
+
+
 class BaseController(ABC):
 
     def __init__(self, drone: "DroneEntity", num_envs: int, dt: float, cfg: dict):
@@ -23,13 +41,12 @@ class BaseController(ABC):
         self.dt = dt
         self.cfg = cfg
 
-        drone_params = ET.parse(drone.morph.file).getroot()[0].attrib
-        self.KF = float(drone_params["kf"])
-        self.KM = float(drone_params["km"])
-        self.TWR = float(drone_params["thrust2weight"])
-        self.mass = float(drone_params["mass"])
-        self.hover_rpm = np.sqrt(((9.81 * self.mass) / 4.0) / self.KF)
-        self.max_rpm = np.sqrt(self.hover_rpm ** 2 * self.TWR)
+        params = drone_params(drone.morph.file)
+        self.KF = params["kf"]
+        self.KM = params["km"]
+        self.mass = params["mass"]
+        self.hover_rpm = params["hover_rpm"]
+        self.max_rpm = params["max_rpm"]
         self.min_rpm    = 3200.0 # TODO: Hard coded for now.... 
         self.hover_cmd  = (self.hover_rpm - self.min_rpm) / (self.max_rpm - self.min_rpm)
 
@@ -41,15 +58,39 @@ class BaseController(ABC):
         """Override to for env reset"""
 
 class SRT(BaseController):
-    """Single Rotor Thrust: actions are per-motor thrust deltas around hover RPM."""
 
     def __init__(self, drone, num_envs, dt, cfg):
         super().__init__(drone, num_envs, dt, cfg)
-        # self.hover_rpm = cfg.get("hover_rpm", 15502.5)
-        self.action_scale = cfg.get("action_scale", 0.8)
 
     def update(self, actions: torch.Tensor) -> torch.Tensor:
-        return (1 + actions * self.action_scale) * self.hover_rpm
+        return actions * self.max_rpm
+
+
+# class SRT(BaseController):
+#     """Single Rotor Thrust: actions are per-motor thrust deltas around hover RPM."""
+#
+#     def __init__(self, drone, num_envs, dt, cfg):
+#         super().__init__(drone, num_envs, dt, cfg)
+#         # self.hover_rpm = cfg.get("hover_rpm", 15502.5)
+#         self.action_scale = cfg.get("action_scale", 0.8)
+#
+#     def update(self, actions: torch.Tensor) -> torch.Tensor:
+#         return (1 + actions * self.action_scale) * self.hover_rpm
+
+class SRTHover(BaseController):
+    """Single rotor thrust around hover: actions in [-1, 1] are relative deltas of the motor command,
+    u = hover_cmd * (1 + action_scale * a), rpm = u * max_rpm (u = SRT's action), so a = 0 hovers.
+    rl_goto.cpp: action_mode "hover_delta" with the same hover_cmd and action_scale."""
+
+    def __init__(self, drone, num_envs, dt, cfg):
+        super().__init__(drone, num_envs, dt, cfg)
+        self.action_scale = cfg.get("action_scale", 1.0)
+        self.hover_u = self.hover_rpm / self.max_rpm  # sqrt(1 / thrust2weight)
+
+    def update(self, actions: torch.Tensor) -> torch.Tensor:
+        u = torch.clamp(self.hover_u * (1.0 + self.action_scale * actions), 0.0, 1.0)
+        return u * self.max_rpm
+
 
 class px4CTBR(BaseController):
     """PX4-style rate controller:
@@ -176,6 +217,7 @@ class px4CTBR(BaseController):
 
 CONTROLLERS = {
     "SRT": SRT,
+    "SRTHover": SRTHover,
     "CTBR": px4CTBR, 
 }
 

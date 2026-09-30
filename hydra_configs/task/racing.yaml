@@ -51,7 +51,7 @@ reward:
 command:
   num_commands: 3
   # track stays a plain data file — gates + arena limits loaded by RaceEnv
-  track_path: misc/fig8.yaml
+  track_path: utils/models/fig8.yaml
 
 rsl_rl:
   algorithm:

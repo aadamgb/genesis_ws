@@ -22,16 +22,19 @@ def main(cfg: DictConfig):
     else:
         # TODO: DELETE this later when all pkls are updated!
         env_cfg, obs_cfg, reward_cfg, command_cfg, train_cfg = loaded
-        print("Carefulll task name not saved in pck, task is set to hover by defaulet!!")
+        print("Carefulll task name not saved in pck, task is set to goto by defaulet!!")
         task_name = cfg.task.name
+
+    if task_name == "hover":  # old pkls, task was renamed to goto
+        task_name = "goto"
 
     env_cfg["visualize_target"] = True
     env_cfg["visualize_camera"] = cfg.record
     env_cfg["episode_length_s"] = cfg.t
 
-    if task_name == "hover":
-        from src.env_hover import HoverEnv
-        env = HoverEnv(num_envs=1, env_cfg=env_cfg, obs_cfg=obs_cfg,
+    if task_name == "goto":
+        from src.env_goto import GotoEnv
+        env = GotoEnv(num_envs=1, env_cfg=env_cfg, obs_cfg=obs_cfg,
                       reward_cfg=reward_cfg, command_cfg=command_cfg, show_viewer=True) 
            
     elif task_name == "racing":

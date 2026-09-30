@@ -47,7 +47,7 @@ class SprindEnv:
         self.scene = gs.Scene(
             sim_options=gs.options.SimOptions(dt=self.dt, substeps=5),
             viewer_options=gs.options.ViewerOptions(
-                max_FPS=env_cfg["max_visualize_FPS"],
+                refresh_rate=env_cfg["max_visualize_FPS"],
                 camera_pos=(3.0, 0.0, 3.0),
                 camera_lookat=(0.0, 0.0, 1.0),
                 camera_fov=40,
@@ -60,7 +60,6 @@ class SprindEnv:
                 rendered_envs_idx=list(range(self.rendered_env_num))
                 ),
             rigid_options=gs.options.RigidOptions(
-                dt=self.dt,
                 constraint_solver=gs.constraint_solver.Newton,
                 enable_collision=True,
                 enable_joint_limit=True,
@@ -116,14 +115,14 @@ class SprindEnv:
 
         self.bambi_1 = self.scene.add_entity(
             morph=gs.morphs.Drone(
-                file="misc/urdf/bros300.urdf",
+                file="utils/models/urdf/bros300.urdf",
                 propellers_spin=(-1, -1, 1, 1),
                 pos=self.bambi_1_init_pos,
             ),
         )
         self.bambi_2 = self.scene.add_entity(
             morph=gs.morphs.Drone(
-                file="misc/urdf/bros300.urdf",
+                file="utils/models/urdf/bros300.urdf",
                 propellers_spin=(-1, -1, 1, 1),
                 pos=self.bambi_2_init_pos,
             ),
@@ -154,7 +153,7 @@ class SprindEnv:
         # self.net = self.scene.add_entity(
         #     material=gs.materials.PBD.Cloth(),
         #     morph=gs.morphs.Mesh(
-        #         file="misc/net.obj",
+        #         file="utils/models/net.obj",
         #         scale=0.5,
         #         pos=(0.0, 0.0, 0.9),
         #         euler=(180.0, 0.0, 0.0),

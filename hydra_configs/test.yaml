@@ -1,5 +1,5 @@
 defaults:
-  - task: hover
+  - task: goto
   - override hydra/job_logging: disabled
   - override hydra/hydra_logging: disabled        
   - _self_
@@ -10,7 +10,7 @@ t: 20
 record: false
 export: false
      
-log_dir: ???  # required by user!
+log_dir: logs/sprind/SRT_no_name  # required by user!
 
 hydra:
   run:

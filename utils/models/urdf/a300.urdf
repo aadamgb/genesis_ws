@@ -2,7 +2,10 @@
 
 <robot name="a300">
 
-  <properties mass="1.21" arm="0.15" kf="4.5e-8" km="5.4e-10" thrust2weight="6.945"  max_speed_kmh="200" gnd_eff_coeff="11.36859" prop_radius="0.089" drag_coeff_xy="9.1785e-7" drag_coeff_z="10.311e-7" dw_coeff_1="2267.18" dw_coeff_2=".16" dw_coeff_3="-.11" />
+  <!-- properties: rotor parameters. kf [N/rpm^2], km [Nm/rpm^2]: F = kf rpm^2, M = km rpm^2. max_rpm [rpm],
+       tau_up/down [s] motor lag from a300.sdf.jinja time_constant_up/down (1/20.5761, 1/18.3486).
+       Mass and inertia are base_link's inertial, the arm is given by the prop link positions. -->
+  <properties kf="4.5e-8" km="5.4e-10" max_rpm="21400.65" tau_up="0.0486" tau_down="0.0545" />
 
   <link name="base_link"> 
 
@@ -100,14 +103,18 @@
 
   </link>
 
+  <!-- Rotor positions match the Gazebo model (alien_gazebo_resources a300.sdf.jinja,
+       rotor_xy_offset = 0.1: x = +-0.095, y = +-0.117) instead of the symmetric +-0.106.
+       Thrust is applied at each prop link's inertial origin. The frame/motor/leg visuals
+       on base_link are unchanged. -->
   <link name="prop0_link">
     <inertial>
-      <origin rpy="0 0 0" xyz="0.106 -0.106 0"/>
+      <origin rpy="0 0 0" xyz="0.095 -0.117 0"/>
       <mass value="0"/>
       <inertia ixx="0" ixy="0" ixz="0" iyy="0" iyz="0" izz="0"/>
     </inertial>
     <visual>
-      <origin rpy="0 0 0" xyz="0.106 -0.106 0.02"/>
+      <origin rpy="0 0 0" xyz="0.095 -0.117 0.02"/>
       <geometry>
           <mesh filename="./mesh/a300/prop.dae"  scale="0.4 0.4 0.4"/>
       </geometry> 
@@ -120,12 +127,12 @@
 
   <link name="prop1_link">
     <inertial>
-      <origin rpy="0 0 0" xyz="-0.106 0.106 0"/>
+      <origin rpy="0 0 0" xyz="-0.095 0.117 0"/>
       <mass value="0"/>
       <inertia ixx="0" ixy="0" ixz="0" iyy="0" iyz="0" izz="0"/>
     </inertial>
     <visual>
-      <origin rpy="0 0 0" xyz="-0.106 0.106 0.02"/>
+      <origin rpy="0 0 0" xyz="-0.095 0.117 0.02"/>
       <geometry>
           <mesh filename="./mesh/a300/prop.dae"  scale="0.4 0.4 0.4"/>
       </geometry> 
@@ -138,12 +145,12 @@
 
   <link name="prop2_link">
     <inertial>
-      <origin rpy="0 0 0" xyz="0.106 0.106 0"/>
+      <origin rpy="0 0 0" xyz="0.095 0.117 0"/>
       <mass value="0"/>
       <inertia ixx="0" ixy="0" ixz="0" iyy="0" iyz="0" izz="0"/>
     </inertial>
     <visual>
-      <origin rpy="0 0 0" xyz="0.106 0.106 0.02"/>
+      <origin rpy="0 0 0" xyz="0.095 0.117 0.02"/>
       <geometry>
           <mesh filename="./mesh/a300/prop.dae"  scale="0.4 0.4 0.4"/>
       </geometry>
@@ -156,12 +163,12 @@
 
   <link name="prop3_link">
     <inertial>
-      <origin rpy="0 0 0" xyz="-0.106 -0.106 0"/>
+      <origin rpy="0 0 0" xyz="-0.095 -0.117 0"/>
       <mass value="0"/>
       <inertia ixx="0" ixy="0" ixz="0" iyy="0" iyz="0" izz="0"/>
     </inertial>
     <visual>
-      <origin rpy="0 0 0" xyz="-0.106 -0.106 0.02"/>
+      <origin rpy="0 0 0" xyz="-0.095 -0.117 0.02"/>
       <geometry>
           <mesh filename="./mesh/a300/prop.dae"  scale="0.4 0.4 0.4"/>
       </geometry>
