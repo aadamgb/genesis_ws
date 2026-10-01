@@ -1,4 +1,7 @@
-name: goto
+defaults:
+  - override /drone@_global_.drone: general
+
+name: adapt_goto
 
 env:
   num_actions: 4
@@ -20,14 +23,14 @@ env:
   base_init_pos: [0.0, 0.0, 1.0]
   base_init_quat: [1.0, 0.0, 0.0, 0.0]
   episode_length_s: 15.0
-  at_target_threshold: 0.2
+  at_target_threshold: 0.1
   resampling_time_s: 3.0
-  # drone parameters and their randomization ranges: hydra_configs/drone/<drone>.yaml
+  # general drone, sampled with its design_informed block: hydra_configs/drone/general.yaml
   drone: ${drone}
-  # per-env domain randomization, see utils/domain_rand.py; enabled: false uses the nominals everywhere
+  # design-informed domain randomization, see utils/design_informed_dr.py; enabled: false flies the middle design
   domain_rand:
     enabled: true
-    physical_resample: startup   # mass / inertia / arm sampled once per env (free) or at every reset (~2 ms/step)
+    physical_resample: startup   # drone sampled once per env (free) or at every reset (~2 ms/step)
     action_delay:  # [s] the gazebo/PX4 loop measured 14–20 ms
       nominal: 0.018
       range: [0.01, 0.026]
@@ -85,7 +88,7 @@ rsl_rl:
     max_grad_norm: 1.0
     num_learning_epochs: 5
     num_mini_batches: 4
-    schedule: adaptive
+    schedule: fixed     # adaptive pinned the learning rate at its 1e-2 cap and training drifted
     use_clipped_value_loss: true
     value_loss_coef: 1.0
   actor:

@@ -2,10 +2,9 @@
 
 <robot name="a300">
 
-  <!-- properties: rotor parameters. kf [N/rpm^2], km [Nm/rpm^2]: F = kf rpm^2, M = km rpm^2. max_rpm [rpm],
-       tau_up/down [s] motor lag from a300.sdf.jinja time_constant_up/down (1/20.5761, 1/18.3486).
-       Mass and inertia are base_link's inertial, the arm is given by the prop link positions. -->
-  <properties kf="4.5e-8" km="5.4e-10" max_rpm="21400.65" tau_up="0.0486" tau_down="0.0545" />
+  <!-- The drone parameters and their randomization ranges are in hydra_configs/drone/a300.yaml, whose
+       nominals are written into Genesis at build. kf and km are here because Genesis needs them to load. -->
+  <properties kf="4.5e-8" km="5.4e-10" />
 
   <link name="base_link"> 
 

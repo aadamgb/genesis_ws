@@ -12,14 +12,14 @@ from genesis.utils.geom import (
     transform_quat_by_quat,
 )
 from src.controller import build_controller
-from utils.domain_rand import DomainRand, from_legacy_env_cfg
+from utils.design_informed_dr import DesignInformedDR
 
 
 def gs_rand_float(lower, upper, shape, device):
     return (upper - lower) * torch.rand(size=shape, device=device) + lower
 
 
-class GotoEnv:
+class AdaptGotoEnv:
     def __init__(self, num_envs, env_cfg, obs_cfg, reward_cfg, command_cfg, show_viewer=False):
         self.num_envs = num_envs
         self.rendered_env_num = min(10, self.num_envs)
@@ -41,9 +41,9 @@ class GotoEnv:
         self.obs_scales = obs_cfg["obs_scales"]
         self.reward_scales = copy.deepcopy(reward_cfg["reward_scales"])
 
-        # drone (hydra_configs/drone) and domain randomization of its parameters and the action delay
-        self.drone_cfg, dr_cfg = from_legacy_env_cfg(env_cfg)
-        self.domain_rand = DomainRand(self.drone_cfg, dr_cfg, self.num_envs)
+        # drone (hydra_configs/drone) with design-informed randomization of its parameters
+        self.drone_cfg = env_cfg["drone"]
+        self.domain_rand = DesignInformedDR(self.drone_cfg, env_cfg["domain_rand"], self.num_envs)
 
         # create scene
         self.scene = gs.Scene(
@@ -115,9 +115,9 @@ class GotoEnv:
         # build scene
         self.scene.build(n_envs=num_envs)
         self.domain_rand.build(self.drone)
-        # per-env hover command (SRTHover): from each drone's mass and kf instead of the nominal ones
-        self.hover_per_env = self.domain_rand.hover_noise is not None
-        if self.hover_per_env and hasattr(self.controller, "hover_u"):
+        # per-env max rpm and hover command (SRTHover) of the sampled drones
+        self.controller.max_rpm = self.domain_rand.max_rpm
+        if hasattr(self.controller, "hover_u"):
             self.controller.hover_u = self.domain_rand.hover_u
 
         # prepare reward functions and multiply reward scales by dt
@@ -179,6 +179,11 @@ class GotoEnv:
         # privileged critic: an extra "critic" observation group with the noise-free state, the motor
         # speeds and the randomized parameters (use obs_groups critic: [policy, critic])
         self.privileged = obs_cfg.get("privileged", False)
+
+        # drone parameters: an extra "params" observation group, set at every reset, for an encoder in the
+        # model (src/models.py EncoderMLPModel)
+        self.use_params = obs_cfg.get("params", False)
+        self.params_buf = torch.zeros((self.num_envs, 17), device=gs.device, dtype=gs.tc_float)
         self.att_err = torch.zeros((self.num_envs, 3), device=gs.device, dtype=gs.tc_float)  # OU part [deg]
         self.yaw_offset = torch.zeros((self.num_envs,), device=gs.device, dtype=gs.tc_float)  # [deg]
         self.vel_bias = torch.zeros((self.num_envs, 3), device=gs.device, dtype=gs.tc_float)
@@ -387,7 +392,7 @@ class GotoEnv:
                     dr.kf / dr.nominal("kf") - 1.0,
                     dr.motor_tau / dr.nominal("motor_tau") - 1.0,
                     dr.action_delay.unsqueeze(1) / 0.02,
-                    *([dr.motor_eff - 1.0] if "motor_eff" in self.drone_cfg else []),
+                    dr.motor_eff - 1.0,
                 ],
                 axis=-1,
             )
@@ -404,10 +409,38 @@ class GotoEnv:
             axis=-1,
         )
 
+    def _update_params(self, envs_idx):
+        """Drone parameters, log ratios to the middle design (c = 0.5) and the per-episode ones scaled to ~[-1, 1]."""
+        dr = self.domain_rand
+        log_ratio = lambda name, x: torch.log(x / dr.nominal(name))
+        self.params_buf[envs_idx] = torch.cat(
+            [
+                log_ratio("mass", dr.mass[envs_idx, None]),
+                log_ratio("inertia", dr.inertia[envs_idx]),
+                log_ratio("arm", dr.arm[envs_idx]),
+                log_ratio("kf", dr.kf[envs_idx]),
+                log_ratio("max_rpm", dr.max_rpm[envs_idx]),
+                log_ratio("motor_tau", dr.motor_tau[envs_idx]),
+                (dr.motor_eff[envs_idx] - 1.0) * 10.0,
+                dr.action_delay[envs_idx, None] / 0.02,
+            ],
+            dim=-1,
+        )
+
+    def params_reference(self):
+        """Values the drone parameters are normalized with (log ratios): mass, inertia (3), arm (4), kf, max_rpm,
+        motor_tau (2) of the middle design."""
+        dr = self.domain_rand
+        names = ("mass", "inertia", "arm", "kf", "max_rpm", "motor_tau")
+        return torch.cat([dr.nominal(n).reshape(-1) for n in names])
+
     def get_observations(self):
+        obs = {"policy": self.obs_buf}
         if self.privileged:
-            return TensorDict({"policy": self.obs_buf, "critic": self.priv_buf}, batch_size=[self.num_envs])
-        return TensorDict({"policy": self.obs_buf}, batch_size=[self.num_envs])
+            obs["critic"] = self.priv_buf
+        if self.use_params:
+            obs["params"] = self.params_buf
+        return TensorDict(obs, batch_size=[self.num_envs])
 
     def reset_idx(self, envs_idx):
         if len(envs_idx) == 0:
@@ -446,14 +479,11 @@ class GotoEnv:
 
         self.controller.reset_idx(envs_idx)
         self.domain_rand.reset_idx(envs_idx)
+        self._update_params(envs_idx)
         tau = self.domain_rand.motor_tau[envs_idx]
         self.motor_alpha_up[envs_idx], self.motor_k_up[envs_idx] = self._motor_lag_coeffs(tau[:, 0:1])
         self.motor_alpha_down[envs_idx], self.motor_k_down[envs_idx] = self._motor_lag_coeffs(tau[:, 1:2])
-        # episodes start mid-air
-        if self.hover_per_env:
-            self.motor_rpm[envs_idx] = self.domain_rand.hover_rpm[envs_idx]
-        else:
-            self.motor_rpm[envs_idx] = float(self.controller.hover_rpm)
+        self.motor_rpm[envs_idx] = self.domain_rand.hover_rpm[envs_idx]  # episodes start mid-air
         self.action_hist_empty[envs_idx] = True
         self.obs_hist_empty[envs_idx] = True
         self._reset_obs_bias(envs_idx)

@@ -1,0 +1,29 @@
+# a300 nominal parameters and domain randomization ranges (utils/domain_rand.py). Each entry has a nominal and
+# optionally range: [lo, hi] (absolute) or scale: [lo, hi] (x nominal); without either the nominal is used.
+# The nominals are written into Genesis when the scene is built, over the values of the urdf.
+name: a300
+urdf: utils/models/urdf/a300.urdf
+propellers_spin: [-1, -1, 1, 1]
+
+mass:          # [kg]
+  nominal: 1.21
+  range: [1.1, 1.35]
+inertia:       # [kg m^2] Jxx, Jyy, Jzz in the body frame
+  nominal: [0.007, 0.007, 0.01]
+  scale: [0.8, 1.2]
+arm:           # [m] rotor distance from the COM, rotors at (+-0.095, +-0.117)
+  nominal: 0.1507
+  # scale: [0.95, 1.05]
+kf:            # [N/rpm^2] F = kf rpm^2 (gazebo torque authority measured at 0.9x the model)
+  nominal: 4.5e-8
+  scale: [0.85, 1.1]
+km:            # [Nm/rpm^2] M = km rpm^2, follows the sampled kf (applied through the rpm)
+  nominal: 5.4e-10
+max_rpm: 21400.65  # [rpm]
+motor_tau:     # [s] first-order lag on rpm, a300.sdf.jinja time_constant_up/down (1/20.5761, 1/18.3486)
+  up: 0.0486
+  down: 0.0545
+  scale: [0.8, 1.25]
+motor_eff:     # [-] per motor, multiplies its rpm command
+  nominal: 1.0
+  range: [0.95, 1.0]

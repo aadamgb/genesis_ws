@@ -1,0 +1,18 @@
+# adapt_goto with the drone parameters encoded into a bounded latent vector (src/models.py EncoderMLPModel),
+# trained end-to-end with the policy; the critic gets the raw parameters
+defaults:
+  - adapt_goto
+  - _self_
+
+obs:
+  params: true
+
+rsl_rl:
+  actor:
+    class_name: src.models:EncoderMLPModel
+    encoder_hidden_dims: [64]
+    latent_dim: 8
+    latent_activation: tanh
+  obs_groups:
+    actor: [policy, params]
+    critic: [policy, params]

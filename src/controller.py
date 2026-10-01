@@ -12,18 +12,25 @@ from genesis.utils.geom import (
     inv_quat,
 )
 
+from utils.domain_rand import load_drone_cfg
+
 if TYPE_CHECKING:
     from genesis.engine.entities.drone_entity import DroneEntity
 
-def drone_params(urdf: str) -> dict:
-    """Rotor parameters from the urdf <properties> (kf, km, max_rpm, ...) plus the mass (the links' inertial
-    masses, as Genesis simulates them), hover_rpm and thrust2weight.
-
-    Older urdfs (bros300, bambi) give mass and thrust2weight in <properties> instead of max_rpm; their
-    <properties> mass is kept so they behave as before."""
-    root = ET.parse(urdf).getroot()
-    p = {k: float(v) for k, v in root.find("properties").attrib.items()}
-    p.setdefault("mass", sum(float(m.get("value")) for m in root.iter("mass")))
+def drone_params(urdf: str, drone_cfg: dict | None = None) -> dict:
+    """Nominal mass, kf, km, max_rpm, hover_rpm and thrust2weight of a drone, from its config (given, or
+    hydra_configs/drone/<urdf name>.yaml). Urdfs without a config (bros300, bambi) give mass, kf, km and
+    thrust2weight in their <properties>."""
+    name = os.path.splitext(os.path.basename(urdf))[0]
+    if drone_cfg is None and os.path.exists(f"hydra_configs/drone/{name}.yaml"):
+        drone_cfg = load_drone_cfg(name)
+    if drone_cfg is not None:
+        p = {k: drone_cfg[k]["nominal"] for k in ("mass", "kf", "km")}
+        p["max_rpm"] = drone_cfg["max_rpm"]
+    else:
+        root = ET.parse(urdf).getroot()
+        p = {k: float(v) for k, v in root.find("properties").attrib.items()}
+        p.setdefault("mass", sum(float(m.get("value")) for m in root.iter("mass")))
 
     p["hover_rpm"] = np.sqrt(9.81 * p["mass"] / 4.0 / p["kf"])
     if "max_rpm" in p:
@@ -41,7 +48,7 @@ class BaseController(ABC):
         self.dt = dt
         self.cfg = cfg
 
-        params = drone_params(drone.morph.file)
+        params = drone_params(drone.morph.file, cfg.get("drone"))
         self.KF = params["kf"]
         self.KM = params["km"]
         self.mass = params["mass"]

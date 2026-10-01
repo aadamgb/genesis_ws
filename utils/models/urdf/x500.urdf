@@ -4,18 +4,13 @@
      mrs_uav_gazebo_simulator/models/mrs_robots_description/sdf/drones/x500.sdf.jinja
      Meshes (in meters) copied from mrs_robots_description/meshes/x500v2.
 
-     properties: rotor parameters. Mass and inertia are base_link's inertial (1.94 kg body + 4 x 0.01608 kg
-     props), the arm is given by the prop link positions (prop_xy_offset 0.1812 * sqrt(2)).
-       kf [N/rpm^2]:     motor_constant 4.2e-5 N/(rad/s)^2 * (2 pi / 60)^2, F = kf rpm^2
-       km [Nm/rpm^2]:    moment_constant 0.06 m * kf, M = km rpm^2
-       max_rpm [rpm]:    max_rot_velocity 780 rad/s
-       tau_up/down [s]:  time_constant_up/down, first-order motor lag (informational, set it in the task yaml)
-     hover: 3267 rpm (0.44 of max rpm), thrust/weight 5.2. Not modelled here: rotor_drag_coefficient 1e-4,
-     rolling_moment_coefficient 1e-6. -->
+     The drone parameters and their randomization ranges are in hydra_configs/drone/x500.yaml, whose
+     nominals are written into Genesis at build. kf and km are in <properties> because Genesis needs them to
+     load. Not modelled: rotor_drag_coefficient 1e-4, rolling_moment_coefficient 1e-6. -->
 
 <robot name="x500">
 
-  <properties kf="4.605815e-7" km="2.763489e-8" max_rpm="7448.451" tau_up="0.0125" tau_down="0.025" />
+  <properties kf="4.605815e-7" km="2.763489e-8" />
 
   <link name="base_link">
 

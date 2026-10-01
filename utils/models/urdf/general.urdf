@@ -1,0 +1,123 @@
+<?xml version="1.0" ?>
+
+<!-- General quadrotor for wide domain randomization: two crossed arms and four motor spheres.
+     The drone parameters and their randomization ranges are in hydra_configs/drone/general.yaml, whose
+     nominals are written into Genesis at build. kf and km are in <properties> because Genesis needs them to
+     load. Front motors red, back motors black. -->
+
+<robot name="general">
+
+  <properties kf="4.5e-8" km="5.4e-10" />
+
+  <link name="base_link">
+
+    <inertial>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="0.01" ixy="0.0" ixz="0.0" iyy="0.01" iyz="0.0" izz="0.016"/>
+    </inertial>
+
+    <visual>
+      <origin rpy="0 1.570796 0.785398" xyz="0 0 0"/>
+      <geometry>
+        <cylinder radius="0.01" length="0.4"/>
+      </geometry>
+      <material name="grey"><color rgba="0.5 0.5 0.5 1"/></material>
+    </visual>
+
+    <visual>
+      <origin rpy="0 1.570796 -0.785398" xyz="0 0 0"/>
+      <geometry>
+        <cylinder radius="0.01" length="0.4"/>
+      </geometry>
+      <material name="grey"><color rgba="0.5 0.5 0.5 1"/></material>
+    </visual>
+
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <cylinder radius="0.05" length="0.04"/>
+      </geometry>
+    </collision>
+
+  </link>
+
+  <!-- Rotors as on the a300/x500: 0 front right (ccw), 1 back left (ccw), 2 front left (cw), 3 back right (cw),
+       so propellers_spin=(-1, -1, 1, 1). Thrust is applied at each prop link's inertial origin. -->
+  <link name="prop0_link">
+    <inertial>
+      <origin rpy="0 0 0" xyz="0.141421 -0.141421 0"/>
+      <mass value="0"/>
+      <inertia ixx="0" ixy="0" ixz="0" iyy="0" iyz="0" izz="0"/>
+    </inertial>
+    <visual>
+      <origin rpy="0 0 0" xyz="0.141421 -0.141421 0"/>
+      <geometry>
+        <sphere radius="0.03"/>
+      </geometry>
+      <material name="red"><color rgba="0.8 0.1 0.1 1"/></material>
+    </visual>
+  </link>
+  <joint name="prop0_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="prop0_link"/>
+  </joint>
+
+  <link name="prop1_link">
+    <inertial>
+      <origin rpy="0 0 0" xyz="-0.141421 0.141421 0"/>
+      <mass value="0"/>
+      <inertia ixx="0" ixy="0" ixz="0" iyy="0" iyz="0" izz="0"/>
+    </inertial>
+    <visual>
+      <origin rpy="0 0 0" xyz="-0.141421 0.141421 0"/>
+      <geometry>
+        <sphere radius="0.03"/>
+      </geometry>
+      <material name="black"><color rgba="0.1 0.1 0.1 1"/></material>
+    </visual>
+  </link>
+  <joint name="prop1_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="prop1_link"/>
+  </joint>
+
+  <link name="prop2_link">
+    <inertial>
+      <origin rpy="0 0 0" xyz="0.141421 0.141421 0"/>
+      <mass value="0"/>
+      <inertia ixx="0" ixy="0" ixz="0" iyy="0" iyz="0" izz="0"/>
+    </inertial>
+    <visual>
+      <origin rpy="0 0 0" xyz="0.141421 0.141421 0"/>
+      <geometry>
+        <sphere radius="0.03"/>
+      </geometry>
+      <material name="red"><color rgba="0.8 0.1 0.1 1"/></material>
+    </visual>
+  </link>
+  <joint name="prop2_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="prop2_link"/>
+  </joint>
+
+  <link name="prop3_link">
+    <inertial>
+      <origin rpy="0 0 0" xyz="-0.141421 -0.141421 0"/>
+      <mass value="0"/>
+      <inertia ixx="0" ixy="0" ixz="0" iyy="0" iyz="0" izz="0"/>
+    </inertial>
+    <visual>
+      <origin rpy="0 0 0" xyz="-0.141421 -0.141421 0"/>
+      <geometry>
+        <sphere radius="0.03"/>
+      </geometry>
+      <material name="black"><color rgba="0.1 0.1 0.1 1"/></material>
+    </visual>
+  </link>
+  <joint name="prop3_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="prop3_link"/>
+  </joint>
+
+</robot>

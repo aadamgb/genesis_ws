@@ -1,4 +1,4 @@
 # /.vscode
-# /logs
-/intuition
+logs/
+.debug/
 **/__pycache__/

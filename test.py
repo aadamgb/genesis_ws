@@ -37,6 +37,11 @@ def main(cfg: DictConfig):
         env = GotoEnv(num_envs=1, env_cfg=env_cfg, obs_cfg=obs_cfg,
                       reward_cfg=reward_cfg, command_cfg=command_cfg, show_viewer=True) 
            
+    elif task_name == "adapt_goto":
+        from src.env_adapt_goto import AdaptGotoEnv
+        env = AdaptGotoEnv(num_envs=1, env_cfg=env_cfg, obs_cfg=obs_cfg,
+                           reward_cfg=reward_cfg, command_cfg=command_cfg, show_viewer=True)
+
     elif task_name == "racing":
         from src.env_racing import RaceEnv
         env = RaceEnv(num_envs=1, env_cfg=env_cfg, obs_cfg=obs_cfg,
@@ -52,7 +57,12 @@ def main(cfg: DictConfig):
     runner = OnPolicyRunner(env, train_cfg, log_dir, device=gs.device)
     runner.load(os.path.join(log_dir, f"model_{cfg.c}.pt"))
     if cfg.export:
-        runner.export_policy_to_jit(log_dir, f"model_{cfg.c}_scripted.pt")
+        actor = runner.alg.get_policy()
+        if hasattr(actor, "encoder"):  # encoder policy: store the params normalization in the file
+            jit_model = torch.jit.script(actor.as_jit(env.params_reference()).to("cpu"))
+            jit_model.save(os.path.join(log_dir, f"model_{cfg.c}_scripted.pt"))
+        else:
+            runner.export_policy_to_jit(log_dir, f"model_{cfg.c}_scripted.pt")
         return
 
     policy = runner.get_inference_policy(device=gs.device)
