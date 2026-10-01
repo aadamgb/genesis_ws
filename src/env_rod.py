@@ -25,6 +25,7 @@ class RodEnv:
         self.dt = env_cfg["dt"]
         self.max_episode_length = math.ceil(env_cfg["episode_length_s"] / self.dt)
 
+        self.cfg = env_cfg  # read by rsl_rl's runner
         self.env_cfg = env_cfg
         self.obs_cfg = obs_cfg
         self.reward_cfg = reward_cfg
