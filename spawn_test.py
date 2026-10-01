@@ -1,9 +1,9 @@
-"""Spawn the a300, the x500 and the general drone and hold them at their hover rpm. After --rand_time seconds
+"""Spawn the a300 and the x500 and hold them at their hover rpm. After --rand_time seconds
 their parameters are randomized with the ranges of hydra_configs/drone/<name>.yaml (utils/domain_rand.py)
 and the new hover rpm is commanded.
 
     python spawn_test.py
-    python spawn_test.py -s 1.05      # thrust 5% above hover: all climb
+    python spawn_test.py -s 1.05      # thrust 5% above hover: both climb
 """
 import argparse
 import math
@@ -17,7 +17,6 @@ from utils.domain_rand import DomainRand, load_drone_cfg
 DRONES = {
     "a300": (0.0, -1.0, 1.0),
     "x500": (0.0, 0.0, 1.0),
-    "general": (0.0, 1.0, 1.0),
 }
 
 PROPS_IDX = [1, 2, 3, 4]  # prop0..3_link
