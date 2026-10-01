@@ -1,6 +1,6 @@
 defaults:
   - drone: a300
-  - task: racing
+  - task: goto
   - override hydra/job_logging: disabled
   - override hydra/hydra_logging: disabled        
   - _self_

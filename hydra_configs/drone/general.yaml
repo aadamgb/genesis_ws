@@ -29,18 +29,3 @@ motor_eff:     # [-] per motor, multiplies its rpm command
   nominal: 1.0
   range: [0.95, 1.0]
 
-# design-informed randomization (utils/design_informed_dr.py, task adapt_goto): a size factor c sizes the
-# drone between the min (c = 0, smallest drone) and max (c = 1, largest drone) designs, then every parameter
-# gets +- noise, the arm lengths +- arm_noise per arm
-design_informed:
-  c: [0.0, 1.0]
-  noise: 0.1
-  arm_noise: 0.01
-  arm:       {min: 0.1, max: 0.4}                                # [m] linear in c
-  mass:      {min: 0.5, max: 5.0}                                # [kg] as l^3
-  inertia:   {min: [0.00125, 0.00125, 0.002], max: [0.2, 0.2, 0.32]}  # [kg m^2] as l^5
-  kf:        {min: 5.45e-9, max: 4.79e-7}                        # [N/rpm^2] log, thrust/weight 4.0 to 2.5
-  max_rpm:   {min: 30000, max: 8000}                             # [rpm] linear
-  motor_tau: {min: [0.0125, 0.025], max: [0.0125, 0.025]}        # [s] up, down, linear
-  km_kf: 0.012                                                   # [m] torque-to-thrust ratio, shared
-  motor_eff: [0.95, 1.0]                                         # per motor, every reset

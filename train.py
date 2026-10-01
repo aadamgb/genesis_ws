@@ -30,14 +30,6 @@ def main(cfg: DictConfig):
         from src.env_goto import GotoEnv
         env = GotoEnv(num_envs=cfg.B, env_cfg=env_cfg, obs_cfg=obs_cfg,
                     reward_cfg=reward_cfg, command_cfg=command_cfg, show_viewer=cfg.v)
-    elif task.name == "adapt_goto":
-        from src.env_adapt_goto import AdaptGotoEnv
-        env = AdaptGotoEnv(num_envs=cfg.B, env_cfg=env_cfg, obs_cfg=obs_cfg,
-                           reward_cfg=reward_cfg, command_cfg=command_cfg, show_viewer=cfg.v)
-    elif task.name == "racing":
-        from src.env_racing import RaceEnv
-        env = RaceEnv(num_envs=cfg.B, env_cfg=env_cfg, obs_cfg=obs_cfg,
-                      reward_cfg=reward_cfg, command_cfg=command_cfg, show_viewer=cfg.v)
     elif task.name == "sprind":
         from src.env_sprind import SprindEnv
         env = SprindEnv(num_envs=cfg.B, env_cfg=env_cfg, obs_cfg=obs_cfg,
