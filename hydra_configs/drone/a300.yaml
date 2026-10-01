@@ -3,6 +3,7 @@
 # The nominals are written into Genesis when the scene is built, over the values of the urdf.
 name: a300
 urdf: utils/models/urdf/a300.urdf
+rope_urdf: utils/models/urdf/a300_rope.urdf  # with a rope hanging from the COM, for the rod task
 propellers_spin: [-1, -1, 1, 1]
 
 mass:          # [kg]
