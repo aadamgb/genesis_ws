@@ -78,7 +78,7 @@ rsl_rl:
     max_grad_norm: 1.0
     num_learning_epochs: 5
     num_mini_batches: 4
-    schedule: fixed   # the adaptive schedule sat at its 1e-2 cap in the adapt_goto runs
+    schedule: fixed   
     use_clipped_value_loss: true
     value_loss_coef: 1.0
   actor:
