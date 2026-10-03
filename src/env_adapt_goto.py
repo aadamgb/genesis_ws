@@ -106,10 +106,18 @@ class AdaptGotoEnv:
                             propellers_spin=tuple(self.drone_cfg["propellers_spin"]), align=False),
         )
 
-        # build_controller
+        # build_controller, on the middle design (the per-env values are set after the build)
+        dr = self.domain_rand
+        kf = dr.nominal("kf").item()
+        nominal = {
+            "mass": {"nominal": dr.nominal("mass").item()},
+            "kf": {"nominal": kf},
+            "km": {"nominal": kf * self.drone_cfg["design_informed"]["km_kf"]},
+            "max_rpm": dr.nominal("max_rpm").item(),
+        }
         self.controller = build_controller(
             self.env_cfg["controller_type"], drone=self.drone, num_envs=self.num_envs, dt=self.dt,
-            cfg={**self.env_cfg, "drone": self.drone_cfg},
+            cfg={**self.env_cfg, "drone": nominal},
         )
 
         # build scene

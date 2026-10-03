@@ -6,28 +6,28 @@ name: general
 urdf: utils/models/urdf/general.urdf
 propellers_spin: [-1, -1, 1, 1]
 
-mass:          # [kg]
-  nominal: 1.0
-  range: [0.5, 5.0]
-inertia:       # [kg m^2] Jxx, Jyy, Jzz in the body frame; nominal 0.25 / 0.25 / 0.4 m arm^2 as the a300/x500,
-  nominal: [0.01, 0.01, 0.016]               # range from (0.5 kg, 0.1 m) to (5 kg, 0.4 m)
-  range: [[0.00125, 0.00125, 0.002], [0.2, 0.2, 0.32]]
-arm:           # [m] rotor distance from the COM (the visuals keep the nominal size)
-  nominal: 0.2
-  range: [0.1, 0.4]
-kf:            # [N/rpm^2] F = kf rpm^2, as the a300
-  nominal: 4.5e-8
-  scale: [0.85, 1.1]
-km:            # [Nm/rpm^2] M = km rpm^2, as the a300, follows the sampled kf (applied through the rpm)
-  nominal: 5.4e-10
-max_rpm: 21400.65  # [rpm] as the a300: thrust / weight 8.4 at 1 kg, 1.7 at 5 kg
-motor_tau:     # [s] first-order lag on rpm, as the x500
-  up: 0.0125
-  down: 0.025
-  scale: [0.8, 1.25]
-motor_eff:     # [-] per motor, multiplies its rpm command
-  nominal: 1.0
-  range: [0.95, 1.0]
+# mass:          # [kg]
+#   nominal: 1.0
+#   range: [0.5, 5.0]
+# inertia:       # [kg m^2] Jxx, Jyy, Jzz in the body frame; nominal 0.25 / 0.25 / 0.4 m arm^2 as the a300/x500,
+#   nominal: [0.01, 0.01, 0.016]               # range from (0.5 kg, 0.1 m) to (5 kg, 0.4 m)
+#   range: [[0.00125, 0.00125, 0.002], [0.2, 0.2, 0.32]]
+# arm:           # [m] rotor distance from the COM (the visuals keep the nominal size)
+#   nominal: 0.2
+#   range: [0.1, 0.4]
+# kf:            # [N/rpm^2] F = kf rpm^2, as the a300
+#   nominal: 4.5e-8
+#   scale: [0.85, 1.1]
+# km:            # [Nm/rpm^2] M = km rpm^2, as the a300, follows the sampled kf (applied through the rpm)
+#   nominal: 5.4e-10
+# max_rpm: 21400.65  # [rpm] as the a300: thrust / weight 8.4 at 1 kg, 1.7 at 5 kg
+# motor_tau:     # [s] first-order lag on rpm, as the x500
+#   up: 0.0125
+#   down: 0.025
+#   scale: [0.8, 1.25]
+# motor_eff:     # [-] per motor, multiplies its rpm command
+#   nominal: 1.0
+#   range: [0.95, 1.0]
 
 # design-informed randomization (utils/design_informed_dr.py, task adapt_goto): a size factor c sizes the
 # drone between the min (c = 0, smallest drone) and max (c = 1, largest drone) designs, then every parameter
@@ -40,7 +40,9 @@ design_informed:
   mass:      {min: 0.5, max: 5.0}                                # [kg] as l^3
   inertia:   {min: [0.00125, 0.00125, 0.002], max: [0.2, 0.2, 0.32]}  # [kg m^2] as l^5
   kf:        {min: 5.45e-9, max: 4.79e-7}                        # [N/rpm^2] log, thrust/weight 4.0 to 2.5
-  max_rpm:   {min: 30000, max: 8000}                             # [rpm] linear
-  motor_tau: {min: [0.0125, 0.025], max: [0.0125, 0.025]}        # [s] up, down, linear
+  # [rpm] linear, +-20%: hover command (hover rpm / max_rpm) 5-95% 0.33-0.55 (a300 0.38, x500 0.44)
+  max_rpm:   {min: 34500, max: 9200, noise: 0.2}
+  # [s] independent of c: up log-uniform, down = up x ratio (x500 0.0125 / 0.025, a300 0.0486 / 0.0545)
+  motor_tau: {up: [0.01, 0.07], down_ratio: [1.0, 2.2]}
   km_kf: 0.012                                                   # [m] torque-to-thrust ratio, shared
   motor_eff: [0.95, 1.0]                                         # per motor, every reset

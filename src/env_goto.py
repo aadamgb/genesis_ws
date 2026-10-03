@@ -498,12 +498,6 @@ class GotoEnv:
         smooth_rew = torch.sum(torch.square(self.actions - self.last_actions), dim=1)
         return smooth_rew
 
-    def _reward_yaw(self):
-        yaw = self.base_euler[:, 2]
-        yaw = torch.where(yaw > 180, yaw - 360, yaw) / 180 * 3.14159  # use rad for yaw_reward
-        yaw_rew = torch.exp(self.reward_cfg["yaw_lambda"] * torch.abs(yaw))
-        return yaw_rew
-
     def _reward_angular(self):
         angular_rew = torch.norm(self.base_ang_vel / 3.14159, dim=1)
         return angular_rew

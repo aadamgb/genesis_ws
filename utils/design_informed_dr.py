@@ -3,7 +3,9 @@ Extreme Adaptation" (arXiv 2409.12949), Sec. II.E.
 
 A size factor c ~ U(c) sizes each drone between the min (c = 0, smallest) and max (c = 1, largest) design of
 drone_cfg["design_informed"]: the arm length is linear in c, the mass scales as l^3, the inertia as l^5, kf
-log-uniformly and the rest linearly. Every parameter then gets +- noise, each arm length +- arm_noise.
+log-uniformly and the rest linearly. Every parameter then gets +- noise (or its own noise: entry), each arm
+length +- arm_noise. The motor time constants do not follow the size (the small a300 has the slowest motors):
+tau_up is log-uniform in motor_tau.up and tau_down = tau_up x U(motor_tau.down_ratio).
 
 The drone is sampled once per env at build (physical_resample: startup) or at every reset (reset, ~2 ms per
 step at 8192 envs for the Genesis writes). Motor efficiencies, action delay and hover estimate are sampled at
@@ -48,7 +50,7 @@ class DesignInformedDR:
 
         kf = self.design["kf"]
         self.kf_ref = float(np.sqrt(kf["min"] * kf["max"]))
-        self._nominal = self.sample_design(torch.full((1,), 0.5, device=gs.device, dtype=gs.tc_float), 0.0, 0.0)
+        self._nominal = self.sample_design(torch.full((1,), 0.5, device=gs.device, dtype=gs.tc_float), random=False)
 
     batch_links_info = True  # mass, inertia and arm are written per env
 
@@ -61,12 +63,22 @@ class DesignInformedDR:
         """Parameters of the middle design, c = 0.5, without noise."""
         return self._nominal[name][0]
 
-    def sample_design(self, c, noise, arm_noise):
+    def sample_design(self, c, random=True):
+        """Design of size c, with the noise and the motor time constants sampled (random) or their middle values."""
         d = self.design
         n = len(c)
 
-        def noisy(x, noise=noise):
+        def noisy(x, name):
+            noise = d[name].get("noise", d["noise"]) if random else 0.0
             return x * (1.0 + noise * (2.0 * torch.rand_like(x) - 1.0))
+
+        def uniform(lo, hi, log=False):
+            u = torch.rand(n, device=gs.device, dtype=gs.tc_float) if random else torch.full((n,), 0.5, device=gs.device)
+            return lo * (hi / lo) ** u if log else lo + (hi - lo) * u
+
+        tau_up = uniform(*d["motor_tau"]["up"], log=True)
+        tau_down = tau_up * uniform(*d["motor_tau"]["down_ratio"])
+        arm_noise = d["arm_noise"] if random else 0.0
 
         l_min, l_max = d["arm"]["min"], d["arm"]["max"]
         l = lerp(d["arm"], c)
@@ -74,12 +86,12 @@ class DesignInformedDR:
         c_J = (l**5 - l_min**5) / (l_max**5 - l_min**5)
         kf_min, kf_max = d["kf"]["min"], d["kf"]["max"]
         return {
-            "arm": noisy(l.unsqueeze(-1).expand(n, 4).clone(), arm_noise),
-            "mass": noisy(lerp(d["mass"], c_m)),
-            "inertia": noisy(lerp(d["inertia"], c_J)),
-            "kf": noisy((kf_min * (kf_max / kf_min) ** c).unsqueeze(-1)),
-            "max_rpm": noisy(lerp(d["max_rpm"], c).unsqueeze(-1)),
-            "motor_tau": noisy(lerp(d["motor_tau"], c)),
+            "arm": l.unsqueeze(-1) * (1.0 + arm_noise * (2.0 * torch.rand((n, 4), device=gs.device) - 1.0)),
+            "mass": noisy(lerp(d["mass"], c_m), "mass"),
+            "inertia": noisy(lerp(d["inertia"], c_J), "inertia"),
+            "kf": noisy((kf_min * (kf_max / kf_min) ** c).unsqueeze(-1), "kf"),
+            "max_rpm": noisy(lerp(d["max_rpm"], c).unsqueeze(-1), "max_rpm"),
+            "motor_tau": torch.stack([tau_up, tau_down], dim=-1),
         }
 
     def build(self, drone):
@@ -104,7 +116,7 @@ class DesignInformedDR:
         if self.enabled:
             lo, hi = self.design["c"]
             self.c[envs_idx] = lo + (hi - lo) * torch.rand(len(envs_idx), device=gs.device, dtype=gs.tc_float)
-            params = self.sample_design(self.c[envs_idx], self.design["noise"], self.design["arm_noise"])
+            params = self.sample_design(self.c[envs_idx])
         else:
             self.c[envs_idx] = 0.5
             params = {k: v.expand(len(envs_idx), *v.shape[1:]) for k, v in self._nominal.items()}
