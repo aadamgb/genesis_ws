@@ -1,0 +1,21 @@
+# General quadrotor for robust_goto (design-informed, utils/design_informed_dr.py) from tinywhoop size (0.03 kg,
+# 3 cm arms) to 5 kg / 40 cm, with the thrust-to-weight ratio and an inertia factor sampled independently of the size
+# so it covers RoboFly (T/W 17.6, hover 0.24, inertia 2.2x the l^5 law), the a300 (T/W 6.9) and the x500 (T/W 5.2).
+name: general
+urdf: utils/models/urdf/general.urdf
+propellers_spin: [-1, -1, 1, 1]
+
+design_informed:
+  c: [0.0, 1.0]
+  noise: 0.1
+  arm_noise: 0.01
+  arm:       {min: 0.03, max: 0.4}                                     # [m] linear in c
+  mass:      {min: 0.03, max: 5.0}                                     # [kg] as l^3
+  inertia:   {min: [6.75e-6, 6.75e-6, 1.08e-5], max: [0.2, 0.2, 0.32]}  # [kg m^2] as l^5, 0.25 / 0.4 m l^2
+  inertia_factor: [0.7, 2.5]                                           # [-] log-uniform, on top of the l^5 law
+  kf:        {min: 3.0e-11, max: 4.79e-7}                               # [N/rpm^2] log in c
+  twr:       [2.0, 20.0]                                               # [-] log-uniform: hover command 0.22-0.71
+  # [s] independent of c: up log-uniform, down = up x ratio (x500 0.0125 / 0.025, a300 0.0486 / 0.0545)
+  motor_tau: {up: [0.01, 0.07], down_ratio: [1.0, 2.2]}
+  km_kf: 0.012                                                         # [m] torque-to-thrust ratio, shared
+  motor_eff: [0.95, 1.0]                                               # per motor, every reset

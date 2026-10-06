@@ -1,0 +1,115 @@
+# robust_goto (src/env_robust_goto.py): the SRT_general_M2_enc_gamma999 setup (adapt_goto_encoder, SRT, gamma 0.999,
+# B 32768 / 8 mini-batches, [256, 256, 128], tilt termination off) on the general_robust drone (tinywhoop to 5 kg), 10-40 ms delay and
+# a 4 m start / target plane, with optional upset starts, mid-episode drone changes and encoder parameter noise.
+defaults:
+  - override /drone@_global_.drone: general_robust
+
+name: robust_goto
+
+env:
+  num_actions: 4
+  dt: 0.008   # [s] 125 Hz, 2 gazebo steps
+  controller_type: ${cm}
+  termination_if_roll_greater_than: 180   # [deg] off: the policy learns to recover
+  termination_if_pitch_greater_than: 180  # [deg]
+  termination_if_close_to_ground: 0.1     # [m]
+  termination_if_x_greater_than: 3.0      # [m] from the target
+  termination_if_y_greater_than: 3.0
+  termination_if_z_greater_than: 3.0
+  base_init_pos: [0.0, 0.0, 4.0]          # [m] on the target plane
+  base_init_quat: [1.0, 0.0, 0.0, 0.0]
+  episode_length_s: 15.0
+  at_target_threshold: 0.2
+  drone: ${drone}
+  domain_rand:
+    enabled: true
+    physical_resample: startup
+    action_delay:   # [s] odometry -> motors, the gazebo/PX4 loop measured 14-20 ms
+      nominal: 0.018
+      range: [0.01, 0.04]
+    hover_estimate_noise: 0.05
+
+  # initial state randomization, half-ranges
+  init_lin_vel: 0.5   # [m/s] per axis
+  init_ang_vel: 1.0   # [rad/s] per axis
+  init_tilt: 15.0     # [deg] roll and pitch
+  init_yaw: 30.0      # [deg]
+  # upset starts: this fraction of the episodes starts at a uniformly random attitude at one of heights, with
+  # body rates up to +- ang_vel per axis
+  upset:
+    fraction: 0.0
+    heights: [3.0, 6.0]   # [m] below / above the target plane
+    ang_vel: 5.0          # [rad/s]
+  # mid-episode drone change: this fraction of the episodes gets a new drone at a uniformly random step
+  rerandomize:
+    fraction: 0.0
+  clip_actions: 1.0
+  visualize_target: ${v}
+  visualize_camera: false
+  max_visualize_FPS: 60
+
+obs:
+  history: 4
+  params: true
+  obs_scales:
+    rel_pos: 0.3333333333333333
+    lin_vel: 0.3333333333333333
+    ang_vel:  0.31831015504887655
+  obs_noise:   # gaussian std in physical units
+    rel_pos: 0.02   # [m]
+    quat: 0.01
+    lin_vel: 0.05   # [m/s]
+    ang_vel: 0.1    # [rad/s]
+  # encoder parameter error per episode, e.g. {physical: 0.15, delay: 0.005} (critic: [policy, params_true])
+  params_noise: {}
+
+reward:
+  reward_scales:
+    target: 10.0
+    smooth: -0.005
+    angular: -0.008
+    crash: -10.0
+
+command:
+  num_commands: 3
+  pos_x_range: [-1.0, 1.0]
+  pos_y_range: [-1.0, 1.0]
+  pos_z_range: [4.0, 4.0]
+
+rsl_rl:
+  algorithm:
+    class_name: PPO
+    clip_param: 0.2
+    desired_kl: 0.01
+    entropy_coef: 0.004
+    gamma: 0.999
+    lam: 0.95
+    learning_rate: 0.0003
+    max_grad_norm: 1.0
+    num_learning_epochs: 5
+    num_mini_batches: 8
+    schedule: fixed
+    use_clipped_value_loss: true
+    value_loss_coef: 1.0
+  actor:
+    class_name: src.models:EncoderMLPModel
+    hidden_dims: [256, 256, 128]
+    activation: tanh
+    encoder_hidden_dims: [64]
+    latent_dim: 8
+    latent_activation: tanh
+    distribution_cfg:
+      class_name: GaussianDistribution
+      init_std: 1.0
+      std_type: scalar
+  critic:
+    class_name: MLPModel
+    hidden_dims: [256, 256, 128]
+    activation: tanh
+  obs_groups:
+    actor: [policy, params]
+    critic: [policy, params]
+  num_steps_per_env: 100
+  save_interval: 100
+  run_name: ${e}
+  logger: tensorboard

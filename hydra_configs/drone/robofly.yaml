@@ -1,0 +1,28 @@
+# RoboFly nominal parameters (Gazebo rl_goto drone block) and domain randomization ranges (utils/domain_rand.py),
+# flown on the symmetric general.urdf with the arm written over it. km is not known: torque-to-thrust 0.012 m as
+# the a300. Each entry has a nominal and optionally range: [lo, hi] (absolute) or scale: [lo, hi] (x nominal).
+name: robofly
+urdf: utils/models/urdf/general.urdf
+propellers_spin: [-1, -1, 1, 1]
+
+mass:          # [kg]
+  nominal: 0.82
+  scale: [0.9, 1.1]
+inertia:       # [kg m^2] Jxx, Jyy, Jzz in the body frame
+  nominal: [0.00837, 0.00837, 0.01638]
+  scale: [0.8, 1.2]
+arm:           # [m] rotor distance from the COM
+  nominal: 0.135
+kf:            # [N/rpm^2] F = kf rpm^2
+  nominal: 7.347372e-8
+  scale: [0.85, 1.1]
+km:            # [Nm/rpm^2] M = km rpm^2, follows the sampled kf
+  nominal: 8.8168e-10
+max_rpm: 21963.382  # [rpm]
+motor_tau:     # [s] first-order lag on rpm, up / down
+  up: 0.0125
+  down: 0.025
+  scale: [0.8, 1.25]
+motor_eff:     # [-] per motor, multiplies its rpm command
+  nominal: 1.0
+  range: [0.95, 1.0]

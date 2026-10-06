@@ -7,6 +7,10 @@ log-uniformly and the rest linearly. Every parameter then gets +- noise (or its 
 length +- arm_noise. The motor time constants do not follow the size (the small a300 has the slowest motors):
 tau_up is log-uniform in motor_tau.up and tau_down = tau_up x U(motor_tau.down_ratio).
 
+Optional, decoupled from the size (robust_goto): twr: [lo, hi] samples the thrust-to-weight ratio log-uniformly
+and sets max_rpm from it (no max_rpm entry then), inertia_factor: [lo, hi] multiplies the inertia by a
+log-uniform factor (drones heavier at the rim than the l^5 law, e.g. RoboFly x2.2).
+
 The drone is sampled once per env at build (physical_resample: startup) or at every reset (reset, ~2 ms per
 step at 8192 envs for the Genesis writes). Motor efficiencies, action delay and hover estimate are sampled at
 every reset. kf and the motor efficiencies act through the rpm (rpm_scale), km follows kf.
@@ -85,12 +89,21 @@ class DesignInformedDR:
         c_m = (l**3 - l_min**3) / (l_max**3 - l_min**3)
         c_J = (l**5 - l_min**5) / (l_max**5 - l_min**5)
         kf_min, kf_max = d["kf"]["min"], d["kf"]["max"]
+        mass = noisy(lerp(d["mass"], c_m), "mass")
+        inertia = noisy(lerp(d["inertia"], c_J), "inertia")
+        if "inertia_factor" in d:
+            inertia = inertia * uniform(*d["inertia_factor"], log=True).unsqueeze(-1)
+        kf = noisy((kf_min * (kf_max / kf_min) ** c).unsqueeze(-1), "kf")
+        if "twr" in d:
+            max_rpm = torch.sqrt(9.81 * mass.unsqueeze(-1) / 4.0 / kf * uniform(*d["twr"], log=True).unsqueeze(-1))
+        else:
+            max_rpm = noisy(lerp(d["max_rpm"], c).unsqueeze(-1), "max_rpm")
         return {
             "arm": l.unsqueeze(-1) * (1.0 + arm_noise * (2.0 * torch.rand((n, 4), device=gs.device) - 1.0)),
-            "mass": noisy(lerp(d["mass"], c_m), "mass"),
-            "inertia": noisy(lerp(d["inertia"], c_J), "inertia"),
-            "kf": noisy((kf_min * (kf_max / kf_min) ** c).unsqueeze(-1), "kf"),
-            "max_rpm": noisy(lerp(d["max_rpm"], c).unsqueeze(-1), "max_rpm"),
+            "mass": mass,
+            "inertia": inertia,
+            "kf": kf,
+            "max_rpm": max_rpm,
             "motor_tau": torch.stack([tau_up, tau_down], dim=-1),
         }
 
@@ -154,4 +167,9 @@ class DesignInformedDR:
     def reset_idx(self, envs_idx):
         if self.resample_drone:
             self._sample_drone(envs_idx)
+        self._sample_episode(envs_idx)
+
+    def resample(self, envs_idx):
+        """A new drone for envs_idx now, mid-episode (robust_goto rerandomize)."""
+        self._sample_drone(envs_idx)
         self._sample_episode(envs_idx)

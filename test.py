@@ -42,6 +42,11 @@ def main(cfg: DictConfig):
         env = AdaptGotoEnv(num_envs=1, env_cfg=env_cfg, obs_cfg=obs_cfg,
                            reward_cfg=reward_cfg, command_cfg=command_cfg, show_viewer=True)
 
+    elif task_name == "robust_goto":
+        from src.env_robust_goto import RobustGotoEnv
+        env = RobustGotoEnv(num_envs=1, env_cfg=env_cfg, obs_cfg=obs_cfg,
+                            reward_cfg=reward_cfg, command_cfg=command_cfg, show_viewer=True)
+
     elif task_name == "racing":
         from src.env_racing import RaceEnv
         env = RaceEnv(num_envs=1, env_cfg=env_cfg, obs_cfg=obs_cfg,
