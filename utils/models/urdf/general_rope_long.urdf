@@ -1,7 +1,7 @@
 <?xml version="1.0" ?>
 
 <!-- general.urdf (des-inf-dom-rand) with the rope of a300_rope.urdf at twice its length (5 x 3 cm) hanging from the COM,
-     for the rod2 task (rod.hang 0.16, spawn_height 2.66).
+     for the pursuer task (rod.hang 0.16, spawn_height 2.66).
      General quadrotor for wide domain randomization: two crossed arms and four motor spheres.
      The drone parameters and their randomization ranges are in hydra_configs/drone/general.yaml, whose
      nominals are written into Genesis at build. kf and km are in <properties> because Genesis needs them to

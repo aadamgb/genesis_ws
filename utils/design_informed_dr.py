@@ -5,9 +5,10 @@ A size factor c ~ U(c) sizes each drone between the min (c = 0, smallest) and ma
 drone_cfg["design_informed"]: the arm length is linear in c, the mass scales as l^3, the inertia as l^5, kf
 log-uniformly and the rest linearly. Every parameter then gets +- noise (or its own noise: entry), each arm
 length +- arm_noise. The motor time constants do not follow the size (the small a300 has the slowest motors):
-tau_up is log-uniform in motor_tau.up and tau_down = tau_up x U(motor_tau.down_ratio).
+tau_up is log-uniform in motor_tau.up and tau_down = tau_up x U(motor_tau.down_ratio), each then +- motor_tau.noise
+(default 0).
 
-Optional, decoupled from the size (robust_goto): twr: [lo, hi] samples the thrust-to-weight ratio log-uniformly
+Optional, decoupled from the size: twr: [lo, hi] samples the thrust-to-weight ratio log-uniformly
 and sets max_rpm from it (no max_rpm entry then), inertia_factor: [lo, hi] multiplies the inertia by a
 log-uniform factor (drones heavier at the rim than the l^5 law, e.g. RoboFly x2.2).
 
@@ -15,7 +16,7 @@ The drone is sampled once per env at build (physical_resample: startup) or at ev
 step at 8192 envs for the Genesis writes). Motor efficiencies, action delay and hover estimate are sampled at
 every reset. kf and the motor efficiencies act through the rpm (rpm_scale), km follows kf.
 
-Several drones can share a design (rod2: both drones of an env from the same c and size-independent draws, each
+Several drones can share a design (pursuer: both drones of an env from the same c and size-independent draws, each
 with its own noise): set the same draw(num_envs) as their shared before build.
 """
 import numpy as np
@@ -90,8 +91,10 @@ class DesignInformedDR:
         def uniform(lo, hi, i, log=False):
             return lo * (hi / lo) ** u[:, i] if log else lo + (hi - lo) * u[:, i]
 
-        tau_up = noisy(uniform(*d["motor_tau"]["up"], 2, log=True), "motor_tau")
-        tau_down = noisy(tau_up * uniform(*d["motor_tau"]["down_ratio"], 3), "motor_tau")
+        a_tau = d["motor_tau"].get("noise", 0.0) if noise else 0.0
+        noisy_tau = lambda x: x * (1.0 + a_tau * (2.0 * torch.rand_like(x) - 1.0))
+        tau_up = noisy_tau(uniform(*d["motor_tau"]["up"], 2, log=True))
+        tau_down = noisy_tau(tau_up * uniform(*d["motor_tau"]["down_ratio"], 3))
         arm_noise = d["arm_noise"] if noise else 0.0
 
         l_min, l_max = d["arm"]["min"], d["arm"]["max"]
@@ -177,6 +180,11 @@ class DesignInformedDR:
     def reset_idx(self, envs_idx):
         if self.resample_drone:
             self._sample_drone(envs_idx)
+        self._sample_episode(envs_idx)
+
+    def resample(self, envs_idx):
+        """A new drone for envs_idx now, mid-episode (evader rerandomize)."""
+        self._sample_drone(envs_idx)
         self._sample_episode(envs_idx)
 
     def nominal_cfg(self):

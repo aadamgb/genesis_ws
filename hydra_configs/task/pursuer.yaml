@@ -1,10 +1,10 @@
-# rod2 (src/env_rod2.py): two general drones (design-informed, one design per env, own noise per drone) carry a rod
-# of random length / mass / radius to a target, direct rotor commands (SRT), centralized policy with an encoder on the
-# drone and rod parameters, 30% upset starts.
+# pursuer (src/env_pursuer.py, was rod2 on the rod branch): two general drones (design-informed, one design per env,
+# own noise per drone) carry a rod with a net, of random length / mass / radius, and bring its center to a target;
+# direct rotor commands (SRT), centralized policy with an encoder on the drone and rod parameters, 30% upset starts.
 defaults:
-  - override /drone@_global_.drone: general_rod
+  - override /drone@_global_.drone: general_pursuer
 
-name: rod2
+name: pursuer
 
 env:
   num_actions: 8   # [drone 0, drone 1] motor commands in [0, 1]

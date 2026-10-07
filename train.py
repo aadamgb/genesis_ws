@@ -26,25 +26,16 @@ def main(cfg: DictConfig):
     with open(f"{log_dir}/cfgs.pkl", "wb") as f:
         pickle.dump([task.name, env_cfg, obs_cfg, reward_cfg, command_cfg, train_cfg], f)
 
-    if task.name == "goto":
-        from src.env_goto import GotoEnv
-        env = GotoEnv(num_envs=cfg.B, env_cfg=env_cfg, obs_cfg=obs_cfg,
-                    reward_cfg=reward_cfg, command_cfg=command_cfg, show_viewer=cfg.v)
-    elif task.name == "rod":
-        from src.env_rod import RodEnv
-        env = RodEnv(num_envs=cfg.B, env_cfg=env_cfg, obs_cfg=obs_cfg,
-                     reward_cfg=reward_cfg, command_cfg=command_cfg, show_viewer=cfg.v)
-    elif task.name == "rod2":
-        from src.env_rod2 import Rod2Env
-        env = Rod2Env(num_envs=cfg.B, env_cfg=env_cfg, obs_cfg=obs_cfg,
-                      reward_cfg=reward_cfg, command_cfg=command_cfg, show_viewer=cfg.v)
-    elif task.name == "sprind":
-        from src.env_sprind import SprindEnv
-        env = SprindEnv(num_envs=cfg.B, env_cfg=env_cfg, obs_cfg=obs_cfg,
+    if task.name == "evader":
+        from src.env_evader import EvaderEnv
+        env = EvaderEnv(num_envs=cfg.B, env_cfg=env_cfg, obs_cfg=obs_cfg,
                         reward_cfg=reward_cfg, command_cfg=command_cfg, show_viewer=cfg.v)
+    elif task.name == "pursuer":
+        from src.env_pursuer import PursuerEnv
+        env = PursuerEnv(num_envs=cfg.B, env_cfg=env_cfg, obs_cfg=obs_cfg,
+                         reward_cfg=reward_cfg, command_cfg=command_cfg, show_viewer=cfg.v)
     else:
         raise ValueError(f"unknown env: {task.name}")
-
 
     runner = OnPolicyRunner(env, train_cfg, log_dir, device=gs.device)
     runner.learn(num_learning_iterations=cfg.m, init_at_random_ep_len=True)

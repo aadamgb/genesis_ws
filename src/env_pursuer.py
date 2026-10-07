@@ -1,5 +1,5 @@
-"""rod2: two general drones carry a rod, hanging from their ropes, and bring its center to a target
-(hydra_configs/task/rod2.yaml). Compared to rod (src/env_rod.py):
+"""pursuer (was rod2 on the rod branch): two general drones carry a rod with a net, hanging from their ropes, and bring
+its center to a target (hydra_configs/task/pursuer.yaml).
 
     drones   design-informed (utils/design_informed_dr.py), sampled once per env: both drones of an env share the
              design (size c and the size-independent draws), each gets its own noise
@@ -27,7 +27,7 @@ def gs_rand_float(lower, upper, shape, device):
     return (upper - lower) * torch.rand(size=shape, device=device) + lower
 
 
-class Rod2Env:
+class PursuerEnv:
     def __init__(self, num_envs, env_cfg, obs_cfg, reward_cfg, command_cfg, show_viewer=False):
         self.num_envs = num_envs
         self.num_actions = env_cfg["num_actions"]
@@ -51,7 +51,7 @@ class Rod2Env:
         shared = drs[0].draw(num_envs)
         for dr in drs:
             dr.shared = shared
-        self.drones = [Quadrotor(drone_cfg, None, env_cfg, num_envs, self.dt, domain_rand=dr) for dr in drs]
+        self.drones = [Quadrotor(drone_cfg, env_cfg, num_envs, self.dt, dr) for dr in drs]
 
         self.scene = gs.Scene(
             sim_options=gs.options.SimOptions(dt=self.dt, substeps=env_cfg["substeps"]),
@@ -112,7 +112,7 @@ class Rod2Env:
         self._sample_rod(rod)
         self._limit_twr(env_cfg["min_system_twr"])
 
-        # rope: dofs after the free joint, the first two are the y and x hinges at the drone (as a300_rope.urdf)
+        # rope: dofs after the free joint, the first two are the y and x hinges at the drone
         e = self.drones[0].entity
         self.rope_dofs = torch.arange(6, e.n_dofs, device=gs.device)
         self.rope_anchor = (e.get_link("segment_1_sphere").get_pos() - e.get_pos())[0]  # body frame, drone level

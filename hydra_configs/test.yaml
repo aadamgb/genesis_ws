@@ -1,6 +1,6 @@
 defaults:
-  - drone: a300
-  - task: goto
+  - drone: general_evader   # the tasks override it, it must come before task
+  - task: evader
   - override hydra/job_logging: disabled
   - override hydra/hydra_logging: disabled        
   - _self_
@@ -11,7 +11,7 @@ t: 20
 record: false
 export: false
      
-log_dir: logs/sprind/SRT_no_name  # required by user!
+log_dir: logs/evader/SRT_general_no_name  # the run to test
 
 hydra:
   run:

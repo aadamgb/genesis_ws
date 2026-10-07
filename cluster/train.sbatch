@@ -10,7 +10,7 @@
 
 # Usage (from /mnt/personal/$USER/genesis_ws):
 #   sbatch cluster/train.sbatch                          # default config
-#   sbatch cluster/train.sbatch task=goto e=run1 seed=2  # any hydra overrides
+#   sbatch cluster/train.sbatch task=evader e=run1 seed=2  # any hydra overrides
 
 source /mnt/appl/software/Anaconda3/2024.02-1/etc/profile.d/conda.sh
 conda activate /mnt/personal/$USER/envs/rl

@@ -1,12 +1,11 @@
 defaults:
-  - drone: a300
-  - task: goto
+  - drone: general_evader   # the tasks override it, it must come before task
+  - task: evader
   - override hydra/job_logging: disabled
   - override hydra/hydra_logging: disabled        
   - _self_
 
 e:  no_name            
-cm: SRTHover                 
 B:  8192                
 m:  301                 
 seed: 1
