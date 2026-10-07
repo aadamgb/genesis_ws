@@ -1,0 +1,21 @@
+# General quadrotor for rod2 (design-informed, utils/design_informed_dr.py) from 1 kg / 15 cm arms (a300 size) to
+# 8 kg / 45 cm, with the thrust-to-weight ratio and an inertia factor sampled independently of the size. Both drones of
+# an env share c and the size-independent draws, each gets its own noise.
+name: general
+rope_urdf: utils/models/urdf/general_rope.urdf  # general.urdf with the rope of a300_rope.urdf (general_rope_long.urdf: x2)
+propellers_spin: [-1, -1, 1, 1]
+
+design_informed:
+  c: [0.0, 1.0]
+  noise: 0.15
+  arm_noise: 0.01
+  arm:       {min: 0.15, max: 0.45}                                    # [m] linear in c
+  mass:      {min: 1.0, max: 8.0}                                      # [kg] as l^3
+  inertia:   {min: [0.0056, 0.0056, 0.009], max: [0.405, 0.405, 0.648]}  # [kg m^2] as l^5, 0.25 / 0.4 m l^2
+  inertia_factor: [0.7, 1.5]                                           # [-] log-uniform, on top of the l^5 law
+  kf:        {min: 4.5e-8, max: 1.0e-6}                                # [N/rpm^2] log in c
+  twr:       [2.0, 7.0]                                                # [-] per drone, log-uniform (a300 6.9, x500 5.2)
+  # [s] independent of c: up log-uniform, down = up x ratio (x500 0.0125 / 0.025, a300 0.0486 / 0.0545)
+  motor_tau: {up: [0.01, 0.07], down_ratio: [1.0, 2.2]}
+  km_kf: 0.012                                                         # [m] torque-to-thrust ratio, shared
+  motor_eff: [0.95, 1.0]                                               # per motor, every reset

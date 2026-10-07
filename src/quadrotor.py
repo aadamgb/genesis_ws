@@ -14,14 +14,14 @@ class Quadrotor:
     (utils/domain_rand.py), action delay, controller and first-order motor lag, plus its state.
 
     Create it before the scene (the scene needs batch_links_info), add it with add_to(scene, ...) and call build()
-    after scene.build()."""
+    after scene.build(). domain_rand replaces the DomainRand of drone_cfg, e.g. a DesignInformedDR (per-env max_rpm)."""
 
-    def __init__(self, drone_cfg, dr_cfg, env_cfg, num_envs, dt):
+    def __init__(self, drone_cfg, dr_cfg, env_cfg, num_envs, dt, domain_rand=None):
         self.drone_cfg = drone_cfg
         self.env_cfg = env_cfg
         self.num_envs = num_envs
         self.dt = dt
-        self.domain_rand = DomainRand(drone_cfg, dr_cfg, num_envs)
+        self.domain_rand = domain_rand or DomainRand(drone_cfg, dr_cfg, num_envs)
 
         def buf(*shape):
             return torch.zeros((num_envs, *shape), device=gs.device, dtype=gs.tc_float)
@@ -48,14 +48,17 @@ class Quadrotor:
         self.entity = scene.add_entity(
             gs.morphs.Drone(file=urdf, pos=pos, propellers_spin=tuple(self.drone_cfg["propellers_spin"]), align=False)
         )
+        nominal = self.domain_rand.nominal_cfg() if hasattr(self.domain_rand, "nominal_cfg") else self.drone_cfg
         self.controller = build_controller(
             self.env_cfg["controller_type"], drone=self.entity, num_envs=self.num_envs, dt=self.dt,
-            cfg={**self.env_cfg, "drone": self.drone_cfg},
+            cfg={**self.env_cfg, "drone": nominal},
         )
         return self.entity
 
     def build(self):
         self.domain_rand.build(self.entity)
+        if hasattr(self.domain_rand, "max_rpm"):  # per-env max rpm of the sampled drones
+            self.controller.max_rpm = self.domain_rand.max_rpm
         # per-env hover command (SRTHover) from each drone's mass and kf
         self.hover_per_env = self.domain_rand.hover_noise is not None
         if self.hover_per_env and hasattr(self.controller, "hover_u"):

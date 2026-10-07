@@ -1,0 +1,114 @@
+# rod2 (src/env_rod2.py): two general drones (design-informed, one design per env, own noise per drone) carry a rod
+# of random length / mass / radius to a target, direct rotor commands (SRT), centralized policy with an encoder on the
+# drone and rod parameters, 30% upset starts.
+defaults:
+  - override /drone@_global_.drone: general_rod
+
+name: rod2
+
+env:
+  num_actions: 8   # [drone 0, drone 1] motor commands in [0, 1]
+  dt: 0.008        # [s] 125 Hz
+  substeps: 4      # the ropes need more than goto's 2
+  controller_type: SRT
+  drone: ${drone}
+  domain_rand:
+    enabled: true
+    physical_resample: startup
+    action_delay:  # [s] the gazebo/PX4 loop measured 14-20 ms
+      nominal: 0.018
+      range: [0.01, 0.04]
+
+  # sampled once per env at startup (log-uniform); the visual rod has the geometric-mean length
+  rod:
+    length: [1.0, 3.0]    # [m], at least min_spacing x the larger arm + 2 tip_inset
+    mass: [0.1, 2.0]      # [kg]
+    radius: [0.01, 0.03]  # [m]
+    tip_inset: 0.05       # [m] rope tips welded this far from the rod ends
+    min_spacing: 3.0      # [-] drone spacing in arm lengths
+    hang: 0.08            # [m] rod below the drones, the rope length (0.16 with general_rope_long.urdf)
+    tip_link: segment_5_cylinder
+  min_system_twr: 1.5     # [-] max thrust of both drones / weight of drones + rod; the max rpm are raised to it
+
+  spawn_height: 2.58      # [m] drones, the rod on the target plane (2.66 with general_rope_long.urdf)
+
+  # initial state: formation offset and velocity (world), each drone tilted (roll, pitch) with body rates, the ropes
+  # keep the rod in place; upset.fraction of the episodes start with the upset ranges instead (half-ranges)
+  init_pos_offset: [0.5, 0.5, 0.2]                           # [m]
+  init: {tilt: 15.0, ang_vel: 1.0, lin_vel: 0.3}             # [deg], [rad/s] per axis, [m/s] per axis
+  upset: {fraction: 0.3, tilt: 90.0, ang_vel: 4.0, lin_vel: 1.0}
+
+  termination_if_rod_tilt_greater_than: 60   # [deg] rod axis from the horizontal
+  termination_if_tilt_greater_than: 180      # [deg] roll or pitch of a drone, 180 = off
+  termination_if_close_to_ground: 0.1        # [m] a drone or the rod
+  termination_if_xy_greater_than: 3.0        # [m] rod center from the target
+  termination_if_z_greater_than: 3.0
+  termination_if_drones_closer_than: 2.0     # [-] arm lengths (mean of the two drones)
+  episode_length_s: 15.0
+  at_target_threshold: 0.1
+  visualize_target: ${v}
+  visualize_camera: false
+  max_visualize_FPS: 60
+
+obs:
+  history: 4
+  obs_scales:
+    rel_pos: 0.3333333333333333
+    lin_vel: 0.3333333333333333
+    ang_vel: 0.31831015504887655
+  obs_noise:   # gaussian std in physical units
+    rel_pos: 0.02   # [m]
+    quat: 0.01
+    lin_vel: 0.05   # [m/s]
+    ang_vel: 0.1    # [rad/s]
+
+reward:
+  reward_scales:
+    target: 10.0     # progress of the rod center
+    smooth: -0.005
+    angular: -0.008
+    crash: -300.0    # x dt = -2.4 per crash, more than the smooth + angular penalties of a whole episode
+
+command:
+  num_commands: 3
+  pos_x_range: [-1.0, 1.0]
+  pos_y_range: [-1.0, 1.0]
+  pos_z_range: [2.5, 2.5]
+
+rsl_rl:
+  algorithm:
+    class_name: PPO
+    clip_param: 0.2
+    desired_kl: 0.01
+    entropy_coef: 0.004
+    gamma: 0.999
+    lam: 0.95
+    learning_rate: 0.0003
+    max_grad_norm: 1.0
+    num_learning_epochs: 5
+    num_mini_batches: 8
+    schedule: fixed
+    use_clipped_value_loss: true
+    value_loss_coef: 1.0
+  actor:
+    class_name: src.models:EncoderMLPModel
+    hidden_dims: [256, 256, 128]
+    activation: tanh
+    encoder_hidden_dims: [64]
+    latent_dim: 10
+    latent_activation: tanh
+    distribution_cfg:
+      class_name: GaussianDistribution
+      init_std: 1.0
+      std_type: scalar
+  critic:
+    class_name: MLPModel
+    hidden_dims: [256, 256, 128]
+    activation: tanh
+  obs_groups:
+    actor: [policy, params]
+    critic: [policy, params]
+  num_steps_per_env: 100
+  save_interval: 100
+  run_name: ${e}
+  logger: tensorboard

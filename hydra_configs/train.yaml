@@ -12,7 +12,7 @@ m:  301
 seed: 1
 v: false
 
-log_dir: logs/${task.name}/${cm}_${drone.name}_${e}
+log_dir: logs/${task.name}/${task.env.controller_type}_${drone.name}_${e}
 
 hydra:
   run:

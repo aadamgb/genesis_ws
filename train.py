@@ -34,6 +34,10 @@ def main(cfg: DictConfig):
         from src.env_rod import RodEnv
         env = RodEnv(num_envs=cfg.B, env_cfg=env_cfg, obs_cfg=obs_cfg,
                      reward_cfg=reward_cfg, command_cfg=command_cfg, show_viewer=cfg.v)
+    elif task.name == "rod2":
+        from src.env_rod2 import Rod2Env
+        env = Rod2Env(num_envs=cfg.B, env_cfg=env_cfg, obs_cfg=obs_cfg,
+                      reward_cfg=reward_cfg, command_cfg=command_cfg, show_viewer=cfg.v)
     elif task.name == "sprind":
         from src.env_sprind import SprindEnv
         env = SprindEnv(num_envs=cfg.B, env_cfg=env_cfg, obs_cfg=obs_cfg,

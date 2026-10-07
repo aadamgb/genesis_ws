@@ -33,6 +33,10 @@ class RodEnv:
         self.obs_scales = obs_cfg["obs_scales"]
         self.reward_scales = copy.deepcopy(reward_cfg["reward_scales"])
 
+        # spawn: the drones side by side along x, the rod hanging below them from the rope tips
+        rod = env_cfg["rod"]
+        half = rod["drone_spacing"] / 2.0
+        z = env_cfg["spawn_height"]
         drone_cfg = env_cfg["drone"]
         if "rope_urdf" not in drone_cfg:
             raise ValueError(f"drone {drone_cfg['name']} has no rope_urdf for the rod task")
@@ -62,13 +66,41 @@ class RodEnv:
                 morph=gs.morphs.Mesh(file="meshes/sphere.obj", scale=0.05, fixed=False, collision=False),
                 surface=gs.surfaces.Rough(diffuse_texture=gs.textures.ColorTexture(color=(0.5, 1.0, 0.5))),
             )
+            self.rod_cg = self.scene.add_entity(
+                morph=gs.morphs.Sphere(
+                    radius=0.015,
+                    collision=False,
+                    fixed=False,
+                    pos=(0, 0, z - 0.08),
+                ),
+                surface=gs.surfaces.Default(color=(1.0, 0.2, 0.2, 1.0)),
+            )
+            self.net = self.scene.add_entity(
+                material=gs.materials.PBD.Cloth(),
+                morph=gs.morphs.Mesh(
+                    file="utils/models/net.obj",
+                    scale=0.5,
+                    pos=(0.0, 0.0, 0.9),
+                    euler=(180.0, 0.0, 0.0),
+                ),
+                surface=gs.surfaces.Default(
+                    color=(0.2, 0.6, 0.2, 1.0),
+                ),
+            )
+
+            # rod cg
+            solver  = self.scene.sim.rigid_solver
+            solver.add_weld_constraint(rod_lnk.idx, self.rod_cg.base_link.idx)
+
+            # net NOTE: Add only for visuals
+            P = self.net.get_particles_pos()
+            P0 = P[0] if P.dim() == 3 else P          
+            top = torch.where(P0[:, 2] > P0[:, 2].max() - 0.02)[0]
+            self.net.fix_particles_to_link(rod_lnk.idx, particles_idx_local=top.tolist())
         else:
             self.target = None
 
-        # spawn: the drones side by side along x, the rod hanging below them from the rope tips
-        rod = env_cfg["rod"]
-        half = rod["drone_spacing"] / 2.0
-        z = env_cfg["spawn_height"]
+
         self.drone_init_pos = [
             torch.tensor((-half, 0.0, z), device=gs.device),
             torch.tensor((half, 0.0, z), device=gs.device),
@@ -98,6 +130,8 @@ class RodEnv:
         # actions in [-1, 1] around hover for SRTHover, motor commands in [0, 1] otherwise
         hover_centered = hasattr(self.drones[0].controller, "hover_u")
         self.action_clip = env_cfg.get("action_clip", [-1.0, 1.0] if hover_centered else [0.0, 1.0])
+        
+
 
         self.reward_functions, self.episode_sums = dict(), dict()
         for name in self.reward_scales.keys():
