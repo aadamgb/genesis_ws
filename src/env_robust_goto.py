@@ -282,7 +282,8 @@ class RobustGotoEnv:
             .reshape((-1,))
         )
 
-    def step(self, actions):
+    def _sim_step(self, actions):
+        """Apply the actions for one control step and update the state buffers (no resets, rewards or observations)."""
         # self.actions = torch.clip(actions, -self.env_cfg["clip_actions"], self.env_cfg["clip_actions"])
         # action range: [0, clip_actions] for SRT (motor commands), action_clip overrides (e.g. [-1, 1] for SRTHover)
         lo, hi = self.env_cfg.get("action_clip", [0.0, self.env_cfg["clip_actions"]])
@@ -310,6 +311,9 @@ class RobustGotoEnv:
         inv_base_quat = inv_quat(self.base_quat)
         self.base_lin_vel[:] = transform_by_quat(self.drone.get_vel(), inv_base_quat)
         self.base_ang_vel[:] = transform_by_quat(self.drone.get_ang(), inv_base_quat)
+
+    def step(self, actions):
+        self._sim_step(actions)
 
         # mid-episode drone change
         if self.rerand_fraction > 0.0:
