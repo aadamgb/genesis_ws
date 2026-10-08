@@ -1,0 +1,71 @@
+# nav (src/env_nav.py): a high-level MLP gives waypoints to a frozen evader (robust_goto) policy to reach goals
+# (yellow) in a 10 x 10 x 3 m region, inside a 12 x 12 x 5 m safety box (red). The low-level run's cfgs.pkl gives
+# the drone, controller, dt and randomization; the env keys below override its env config.
+defaults:
+  - override /drone@_global_.drone: general_evader   # log dir name only, the drone comes from the low-level run
+
+name: nav
+
+env:
+  low_level: logs/robust_goto/SRT_general_R5_rerand_upset/model_1999.pt
+  num_actions: 4            # low-level actions
+  decimation: 10            # low-level steps per waypoint (80 ms at dt 0.008)
+  waypoint_range: 1.5       # [m] half side of the waypoint cube around the drone
+  safety_box: [[-6.0, 6.0], [-6.0, 6.0], [0.0, 5.0]]   # [m] x, y, z bounds, leaving it terminates
+  termination_if_close_to_ground: 0.1   # [m]
+  goal_threshold: 0.3       # [m]
+  episode_length_s: 30.0
+  upset: {}
+  rerandomize: {fraction: 0.0}
+  visualize_target: ${v}
+  visualize_camera: false
+  max_visualize_FPS: 60
+
+obs: {}   # the low-level observation config comes from its cfgs.pkl
+
+reward:
+  reward_scales:   # per high-level step
+    progress: 1.0   # per m closer to the goal
+    reach: 10.0     # per goal reached
+    crash: -10.0    # ground or safety box
+
+command:   # goal and spawn region [m]
+  num_commands: 3
+  pos_x_range: [-5.0, 5.0]
+  pos_y_range: [-5.0, 5.0]
+  pos_z_range: [1.0, 4.0]
+
+rsl_rl:
+  algorithm:
+    class_name: PPO
+    clip_param: 0.2
+    desired_kl: 0.01
+    entropy_coef: 0.004
+    gamma: 0.99
+    lam: 0.95
+    learning_rate: 0.0003
+    max_grad_norm: 1.0
+    num_learning_epochs: 5
+    num_mini_batches: 4
+    schedule: fixed
+    use_clipped_value_loss: true
+    value_loss_coef: 1.0
+  actor:
+    class_name: MLPModel
+    hidden_dims: [128, 128]
+    activation: tanh
+    distribution_cfg:
+      class_name: GaussianDistribution
+      init_std: 0.5
+      std_type: scalar
+  critic:
+    class_name: MLPModel
+    hidden_dims: [128, 128]
+    activation: tanh
+  obs_groups:
+    actor: [policy]
+    critic: [policy]
+  num_steps_per_env: 32
+  save_interval: 100
+  run_name: ${e}
+  logger: tensorboard

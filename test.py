@@ -29,6 +29,10 @@ def main(cfg: DictConfig):
         from src.env_pursuer import PursuerEnv
         env = PursuerEnv(num_envs=1, env_cfg=env_cfg, obs_cfg=obs_cfg,
                          reward_cfg=reward_cfg, command_cfg=command_cfg, show_viewer=True)
+    elif task_name == "nav":
+        from src.env_nav import NavEnv
+        env = NavEnv(num_envs=1, env_cfg=env_cfg, obs_cfg=obs_cfg,
+                     reward_cfg=reward_cfg, command_cfg=command_cfg, show_viewer=True)
     else:
         raise ValueError(f"unknown env: {task_name}")
 
