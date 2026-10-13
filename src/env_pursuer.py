@@ -5,10 +5,13 @@ its center to a target (hydra_configs/task/pursuer.yaml).
              design (size c and the size-independent draws), each gets its own noise
     rod      length, mass and radius sampled once per env (log-uniform); the drone spacing follows the length and the
              max rpm are raised so that the max thrust of both drones is min_system_twr x the weight of the system
+    rope     length sampled once per env (uniform): the hinge offsets of the urdf rope are stretched per env
+             (batch_links_info), the drones spawn that far above the rod; no hinge armature (src/quadrotor.py)
     policy   direct rotor commands in [0, 1] (SRT); a "params" observation group (drones and rod) for an encoder
     starts   every drone tilted with body rates, upset.fraction of the episodes with the upset ranges; the ropes are
              bent so that the rod stays in place
-    crash    rod tilt from the horizontal, drone tilt is permissive
+    crash    rod tilt from the horizontal, a rope (rod weld to drone) off the perpendicular to the rod, drone tilt is
+             permissive
 """
 import copy
 import math
@@ -18,6 +21,7 @@ from tensordict import TensorDict
 
 import genesis as gs
 from genesis.utils.geom import transform_by_quat
+from genesis.utils.misc import qd_to_torch
 
 from src.quadrotor import Quadrotor
 from utils.design_informed_dr import DesignInformedDR
@@ -28,6 +32,8 @@ def gs_rand_float(lower, upper, shape, device):
 
 
 class PursuerEnv:
+    target_color = (0.5, 1.0, 0.5)  # target sphere (visualize_target)
+
     def __init__(self, num_envs, env_cfg, obs_cfg, reward_cfg, command_cfg, show_viewer=False):
         self.num_envs = num_envs
         self.num_actions = env_cfg["num_actions"]
@@ -75,7 +81,7 @@ class PursuerEnv:
         # spawn: the drones side by side along x, the rod hanging below them from the rope tips
         rod = env_cfg["rod"]
         z = env_cfg["spawn_height"]
-        self.rod_init_pos = torch.tensor((0.0, 0.0, z - rod["hang"]), device=gs.device)
+        self.rod_init_pos = torch.tensor((0.0, 0.0, z), device=gs.device)
         self.rod_init_quat = torch.tensor((0.7071068, 0.0, 0.7071068, 0.0), device=gs.device)  # axis along x
         self.rod_ref = {k: math.sqrt(rod[k][0] * rod[k][1]) for k in ("length", "mass", "radius")}
         for drone in self.drones:
@@ -90,10 +96,11 @@ class PursuerEnv:
         )
 
         self.visualize = env_cfg["visualize_target"]
+        self.debug_objs = []  # drawn by _draw
         if self.visualize:
             self.target = self.scene.add_entity(
                 morph=gs.morphs.Mesh(file="meshes/sphere.obj", scale=0.05, fixed=False, collision=False),
-                surface=gs.surfaces.Rough(diffuse_texture=gs.textures.ColorTexture(color=(0.5, 1.0, 0.5))),
+                surface=gs.surfaces.Rough(diffuse_texture=gs.textures.ColorTexture(color=self.target_color)),
             )
             # visual only: the net hangs from the rod (the cloth does not act on the rigid bodies)
             half = self.rod_ref["length"] / 2.0
@@ -106,16 +113,19 @@ class PursuerEnv:
             #     surface=gs.surfaces.Default(color=(0.2, 0.6, 0.2, 1.0)),
             # )
 
+        self._add_entities()
         self.scene.build(n_envs=num_envs)
         for drone in self.drones:
             drone.build()
         self._sample_rod(rod)
-        self._limit_twr(env_cfg["min_system_twr"])
-
         # rope: dofs after the free joint, the first two are the y and x hinges at the drone
+        self.rope_dofs = torch.arange(6, self.drones[0].entity.n_dofs, device=gs.device)
+        self._sample_rope(env_cfg["rope"], rod["tip_link"])
+        self._limit_twr(env_cfg["min_system_twr"])
+        self._built()
+
         e = self.drones[0].entity
-        self.rope_dofs = torch.arange(6, e.n_dofs, device=gs.device)
-        self.rope_anchor = (e.get_link("segment_1_sphere").get_pos() - e.get_pos())[0]  # body frame, drone level
+        self.rope_anchor = e.get_link("segment_1_sphere").get_pos() - e.get_pos()  # per env, body frame, drone level
         self.init_quat = torch.tensor((1.0, 0.0, 0.0, 0.0), device=gs.device)
         self.init_pos_offset = torch.tensor(env_cfg["init_pos_offset"], device=gs.device)
         self.init = env_cfg["init"]
@@ -157,6 +167,9 @@ class PursuerEnv:
         self.crash_condition = torch.zeros((num_envs,), device=gs.device, dtype=torch.bool)
         self.rod_axis = torch.tensor((0.0, 0.0, 1.0), device=gs.device).expand(num_envs, -1)  # cylinder axis, local
         self.max_rod_axis_z = math.sin(math.radians(env_cfg["termination_if_rod_tilt_greater_than"]))
+        # off (90) for runs saved before it (P1_rope_B128k), whose cfgs.pkl nav_pursuer / pursuit_evasion load
+        self.max_rope_along_rod = math.sin(math.radians(env_cfg.get("termination_if_rope_angle_greater_than", 90)))
+        self.tip_links = [d.entity.get_link(rod["tip_link"]) for d in self.drones]
         arms = sum(d.domain_rand.arm.mean(dim=1) for d in self.drones) / 2.0
         self.min_separation = env_cfg["termination_if_drones_closer_than"] * arms
 
@@ -165,17 +178,23 @@ class PursuerEnv:
 
         # observation history: the current frame followed by the previous history-1 frames (newest first)
         self.obs_history = obs_cfg.get("history", 1)
-        self.frame_size = 10 + 2 * 13 + self.num_actions
+        self.frame_size = 13 + 2 * 13 + self.num_actions
         self.obs_hist = buf(self.obs_history, self.frame_size)
         self.obs_hist_empty = torch.ones((num_envs,), device=gs.device, dtype=torch.bool)
 
-        # encoder input, set at every reset: per drone 17 (_drone_params), rod length, mass, radius
-        self.params_buf = buf(2 * 17 + 3)
+        # encoder input, set at every reset: per drone 17 (_drone_params), rod length, mass, radius, rope length
+        self.params_buf = buf(2 * 17 + 4)
 
         self.extras = dict()
         self.reset()
 
     # ------------ drones and rod ----------------
+    def _add_entities(self):
+        """Hook for subclasses: more entities, before the scene is built."""
+
+    def _built(self):
+        """Hook for subclasses: after the scene, the drones and the rod are built and sampled."""
+
     def _sample_rod(self, rod):
         """Length, mass and radius per env, log-uniform; the length is raised to fit the drones."""
         n = self.num_envs
@@ -196,6 +215,27 @@ class PursuerEnv:
         all_envs = torch.arange(n, device=gs.device)
         self.rod.set_links_mass(m[:, None], [0], all_envs)
         self.rod.set_links_inertia(inertia[:, None], [0], all_envs)
+
+    def _sample_rope(self, rope, tip_link):
+        """Length (base_link to the rod weld) per env, uniform: the hinge offsets and the COM of the rope links of
+        both drones are scaled from the urdf rope, which hangs straight at the build. The first hinge stays at the
+        drone (a scaled base_link offset would be a rigid stick), only the segments between the hinges stretch."""
+        n = self.num_envs
+        self.rope_length = gs_rand_float(*rope["length"], (n,), gs.device)
+        self.rope_ref = sum(rope["length"]) / 2.0
+        solver = self.scene.sim.rigid_solver
+        links_pos = qd_to_torch(solver.dyn_info.links.pos, copy=True)  # (n_links, n_envs, 3), parent frame
+        for drone in self.drones:
+            e = drone.entity
+            first = (e.get_pos() - e.get_link("segment_1_sphere").get_pos())[0].norm()
+            urdf_length = (e.get_pos() - e.get_link(tip_link).get_pos())[0].norm()
+            scale = ((self.rope_length - first) / (urdf_length - first))[:, None]
+            links = [link for link in e.links if link.name.startswith("segment_") and link.name != "segment_1_sphere"]
+            idx = [link.idx for link in links]
+            links_pos[idx] *= scale
+            com = qd_to_torch(solver.dyn_info.links.inertial_pos, copy=True)[idx].transpose(0, 1) * scale[:, None]
+            solver.dyn_info.links.pos.from_torch(links_pos)
+            e.set_links_COM(com, [link.idx_local for link in links])  # also refreshes the kinematics
 
     def _limit_twr(self, min_twr):
         """Raise the max rpm of both drones where their max thrust is below min_twr x the weight of drones + rod."""
@@ -224,7 +264,10 @@ class PursuerEnv:
 
     def _update_params(self, envs_idx):
         rod = [torch.log(getattr(self, "rod_" + k)[envs_idx] / ref)[:, None] for k, ref in self.rod_ref.items()]
-        self.params_buf[envs_idx] = torch.cat([self._drone_params(d.domain_rand, envs_idx) for d in self.drones] + rod, dim=-1)
+        rope = torch.log(self.rope_length[envs_idx] / self.rope_ref)[:, None]
+        self.params_buf[envs_idx] = torch.cat(
+            [self._drone_params(d.domain_rand, envs_idx) for d in self.drones] + rod + [rope], dim=-1
+        )
 
     def _place(self, envs_idx, upset, random=True):
         """The formation of envs_idx at its spawn, offset and moving as one body (random); each drone tilted
@@ -239,7 +282,7 @@ class PursuerEnv:
             offset, lin_vel = zeros, zeros
         for i, drone in enumerate(self.drones):
             pos = self.rod_init_pos + offset
-            pos[:, 2] = self.env_cfg["spawn_height"] + offset[:, 2]
+            pos[:, 2] += self.rope_length[envs_idx]
             pos[:, 0] += (2 * i - 1) * self.half_spacing[envs_idx]
             quat = self.init_quat.expand(n, -1)
             rope = torch.zeros((n, len(self.rope_dofs)), device=gs.device)
@@ -250,7 +293,8 @@ class PursuerEnv:
                 cr, sr, cp, sp = torch.cos(roll / 2), torch.sin(roll / 2), torch.cos(pitch / 2), torch.sin(pitch / 2)
                 quat = torch.stack([cr * cp, sr * cp, cr * sp, sr * sp], dim=1)
                 rope[:, 0], rope[:, 1] = -pitch, -roll
-                pos = pos + self.rope_anchor - transform_by_quat(self.rope_anchor.expand(n, -1), quat)
+                anchor = self.rope_anchor[envs_idx]
+                pos = pos + anchor - transform_by_quat(anchor, quat)
                 ang_vel = rng("ang_vel") * (2.0 * torch.rand((n, 3), device=gs.device) - 1.0)
             e = drone.entity
             e.set_pos(pos, zero_velocity=True, envs_idx=envs_idx)
@@ -272,7 +316,8 @@ class PursuerEnv:
         self.commands[envs_idx, 1] = gs_rand_float(*self.command_cfg["pos_y_range"], n, gs.device)
         self.commands[envs_idx, 2] = gs_rand_float(*self.command_cfg["pos_z_range"], n, gs.device)
 
-    def step(self, actions):
+    def _sim_step(self, actions):
+        """Apply the actions for one control step and update the state buffers (no resets, rewards or observations)."""
         self.actions = torch.clip(actions, *self.action_clip)
         for i, drone in enumerate(self.drones):
             drone.apply(self.actions[:, 4 * i : 4 * i + 4])
@@ -289,25 +334,18 @@ class PursuerEnv:
         if self.visualize:
             self._draw()
 
+    def step(self, actions):
+        self._sim_step(actions)
+
         at_target = (self.rel_pos.norm(dim=1) < self.env_cfg["at_target_threshold"]).nonzero(as_tuple=False).reshape(-1)
         self._resample_commands(at_target)
 
         cfg = self.env_cfg
-        separation = (self.drones[0].pos - self.drones[1].pos).norm(dim=1)
-        rod_axis_z = transform_by_quat(self.rod_axis, self.rod_quat)[:, 2]
         self.crash_condition = (
             (self.rel_pos[:, :2].abs() > cfg["termination_if_xy_greater_than"]).any(dim=1)
             | (self.rel_pos[:, 2].abs() > cfg["termination_if_z_greater_than"])
-            | (rod_axis_z.abs() > self.max_rod_axis_z)
-            | (self.rod_pos[:, 2] < cfg["termination_if_close_to_ground"])
-            | (separation < self.min_separation)
-            | self.scene.rigid_solver.get_error_envs_mask()
+            | self._failure()
         )
-        for drone in self.drones:
-            self.crash_condition |= (
-                (drone.euler[:, :2].abs() > cfg["termination_if_tilt_greater_than"]).any(dim=1)
-                | (drone.pos[:, 2] < cfg["termination_if_close_to_ground"])
-            )
         timed_out = self.episode_length_buf > self.max_episode_length
         self.reset_buf = timed_out | self.crash_condition
         self.extras["time_outs"] = timed_out.to(gs.tc_float)
@@ -327,6 +365,27 @@ class PursuerEnv:
         self._update_observation()
         return self.get_observations(), self.rew_buf, self.reset_buf, self.extras
 
+    def _failure(self):
+        """Rod tilted, a rope off the perpendicular to the rod (the drones pulling the ropes taut along it), a drone
+        or the rod on the ground, drones too close, a drone tilted or a solver error."""
+        cfg = self.env_cfg
+        separation = (self.drones[0].pos - self.drones[1].pos).norm(dim=1)
+        axis = transform_by_quat(self.rod_axis, self.rod_quat)
+        failure = (
+            (axis[:, 2].abs() > self.max_rod_axis_z)
+            | (self.rod_pos[:, 2] < cfg["termination_if_close_to_ground"])
+            | (separation < self.min_separation)
+            | self.scene.rigid_solver.get_error_envs_mask()
+        )
+        for drone, tip in zip(self.drones, self.tip_links):
+            rope = drone.pos - tip.get_pos()
+            failure |= (
+                ((rope * axis).sum(dim=1).abs() > self.max_rope_along_rod * rope.norm(dim=1))
+                | (drone.euler[:, :2].abs() > cfg["termination_if_tilt_greater_than"]).any(dim=1)
+                | (drone.pos[:, 2] < cfg["termination_if_close_to_ground"])
+            )
+        return failure
+
     def _update_rod(self):
         self.rod_pos[:] = self.rod.get_pos()
         self.rod_quat[:] = self.rod.get_quat()
@@ -335,14 +394,23 @@ class PursuerEnv:
         self.last_rel_pos[:] = self.commands - self.last_rod_pos
 
     def _draw(self):
-        """The rod of the rendered envs at its sampled length and radius, and its center (red)."""
-        self.scene.clear_debug_objects()
+        """The rod of the rendered envs at its sampled length and radius, its center (red) and the ropes (the urdf
+        visuals keep the urdf length)."""
+        for obj in self.debug_objs:  # only its own, other debug objects stay
+            self.scene.clear_debug_object(obj)
+        self.debug_objs = []
         envs = self.rendered_envs
         pos = self.rod_pos[envs]
         half = transform_by_quat(self.rod_axis[envs], self.rod_quat[envs]) * self.rod_length[envs, None] / 2.0
         for a, b, r in zip((pos - half).tolist(), (pos + half).tolist(), self.rod_radius[envs].tolist()):
-            self.scene.draw_debug_line(a, b, radius=r, color=(0.1, 0.1, 0.1, 1.0))
-        self.scene.draw_debug_spheres(pos.cpu().numpy(), radius=0.03, color=(1.0, 0.1, 0.1, 1.0))
+            self.debug_objs.append(self.scene.draw_debug_line(a, b, radius=r, color=(0.1, 0.1, 0.1, 1.0)))
+        self.debug_objs.append(self.scene.draw_debug_spheres(pos.cpu().numpy(), radius=0.03, color=(1.0, 0.1, 0.1, 1.0)))
+        for drone in self.drones:
+            e = drone.entity
+            points = [e.get_pos(envs)] + [e.get_link(f"segment_{k}_sphere").get_pos(envs) for k in range(1, 6)]
+            for a, b in zip(points[:-1], points[1:]):
+                for p, q in zip(a.tolist(), b.tolist()):
+                    self.debug_objs.append(self.scene.draw_debug_line(p, q, radius=0.004, color=(0.1, 0.2, 0.8, 1.0)))
 
     def _noisy(self, x, key):
         return x + self.obs_noise.get(key, 0.0) * torch.randn_like(x) if self.obs_noise else x
@@ -354,9 +422,11 @@ class PursuerEnv:
         def unit(q):
             return q / q.norm(dim=1, keepdim=True)
 
+        rod_quat = unit(self._noisy(self.rod_quat, "quat"))
         parts = [
             clip(self._noisy(self.rel_pos, "rel_pos"), s["rel_pos"]),
-            unit(self._noisy(self.rod_quat, "quat")),
+            rod_quat,
+            transform_by_quat(self.rod_axis, rod_quat),  # rod axis in the world, z = sin(tilt) as the termination
             clip(self._noisy(self.rod_vel, "lin_vel"), s["lin_vel"]),
         ]
         for drone in self.drones:

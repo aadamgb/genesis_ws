@@ -42,9 +42,11 @@ class Quadrotor:
         self.envs = torch.arange(num_envs, device=gs.device)
 
     def add_to(self, scene, urdf, pos):
-        # align=False: Genesis refuses to write the inertial properties of an aligned body at runtime
+        # align=False: Genesis refuses to write the inertial properties of an aligned body at runtime;
+        # default_armature=None: no 0.1 kg m^2 rotor inertia on the rope hinges (the free joint never gets one)
         self.entity = scene.add_entity(
-            gs.morphs.Drone(file=urdf, pos=pos, propellers_spin=tuple(self.drone_cfg["propellers_spin"]), align=False)
+            gs.morphs.Drone(file=urdf, pos=pos, propellers_spin=tuple(self.drone_cfg["propellers_spin"]), align=False,
+                            default_armature=None)
         )
         self.controller = build_controller(
             self.env_cfg["controller_type"], drone=self.entity, num_envs=self.num_envs, dt=self.dt,

@@ -6,7 +6,7 @@ defaults:
   - _self_
 
 e:  no_name            
-B:  8192                
+B:  ${oc.select:task.num_envs,8192}   # a task can set its own default (num_envs)
 m:  301                 
 seed: 1
 v: false

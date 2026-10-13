@@ -2,7 +2,7 @@
 # 8 kg / 45 cm, with the thrust-to-weight ratio and an inertia factor sampled independently of the size. Both drones of
 # an env share c and the size-independent draws, each gets its own noise.
 name: general
-rope_urdf: utils/models/urdf/general_rope.urdf  # general.urdf with a rope of 5 x 1.5 cm (general_rope_long.urdf: x2)
+rope_urdf: utils/models/urdf/general_rope.urdf  # general.urdf with a rope of 5 hinges, stretched per env to task env.rope.length
 propellers_spin: [-1, -1, 1, 1]
 
 design_informed:

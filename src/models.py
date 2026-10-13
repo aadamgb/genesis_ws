@@ -1,4 +1,6 @@
 import copy
+import os
+import pickle
 
 import torch
 import torch.nn as nn
@@ -6,6 +8,22 @@ from tensordict import TensorDict
 
 from rsl_rl.models import MLPModel
 from rsl_rl.modules import MLP, EmpiricalNormalization
+from rsl_rl.utils import resolve_class
+
+
+def load_policy(model_path, obs, num_actions, agent=None):
+    """The actor of a model_*.pt, built from the cfgs.pkl of its run dir, in eval mode. agent: the key of one agent
+    of a multi-agent run (train_marl.py), whose model and obs_groups are stored per agent."""
+    with open(os.path.join(os.path.dirname(model_path), "cfgs.pkl"), "rb") as f:
+        train_cfg = pickle.load(f)[5]
+    state = torch.load(model_path, map_location=obs.device, weights_only=False)
+    obs_groups = train_cfg["obs_groups"]
+    if agent is not None:
+        state, obs_groups = state[agent], obs_groups[agent]
+    actor_class, actor_cfg = resolve_class(train_cfg["actor"])
+    actor = actor_class(obs, obs_groups, "actor", num_actions, **actor_cfg).to(obs.device)
+    actor.load_state_dict(state["actor_state_dict"])
+    return actor.eval()
 
 
 class EncoderMLPModel(MLPModel):

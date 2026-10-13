@@ -15,7 +15,7 @@ def main(cfg: DictConfig):
     log_dir = cfg.log_dir
     with open(f"{log_dir}/cfgs.pkl", "rb") as f:
         task_name, env_cfg, obs_cfg, reward_cfg, command_cfg, train_cfg = pickle.load(f)
-    task_name = {"rod2": "pursuer", "robust_goto": "evader"}.get(task_name, task_name)  # runs from rod / des-inf-dom-rand
+    task_name = {"rod2": "pursuer", "robust_goto": "evader", "nav": "nav_evader"}.get(task_name, task_name)  # runs from rod / des-inf-dom-rand
 
     env_cfg["visualize_target"] = True
     env_cfg["visualize_camera"] = cfg.record
@@ -29,10 +29,28 @@ def main(cfg: DictConfig):
         from src.env_pursuer import PursuerEnv
         env = PursuerEnv(num_envs=1, env_cfg=env_cfg, obs_cfg=obs_cfg,
                          reward_cfg=reward_cfg, command_cfg=command_cfg, show_viewer=True)
-    elif task_name == "nav":
-        from src.env_nav import NavEnv
-        env = NavEnv(num_envs=1, env_cfg=env_cfg, obs_cfg=obs_cfg,
-                     reward_cfg=reward_cfg, command_cfg=command_cfg, show_viewer=True)
+    elif task_name == "nav_evader":
+        from src.env_nav import NavEvaderEnv
+        env = NavEvaderEnv(num_envs=1, env_cfg=env_cfg, obs_cfg=obs_cfg,
+                           reward_cfg=reward_cfg, command_cfg=command_cfg, show_viewer=True)
+    elif task_name == "nav_pursuer":
+        from src.env_nav import NavPursuerEnv
+        env = NavPursuerEnv(num_envs=1, env_cfg=env_cfg, obs_cfg=obs_cfg,
+                            reward_cfg=reward_cfg, command_cfg=command_cfg, show_viewer=True)
+    elif task_name == "pursuit_evasion":  # two agents (train_marl.py): no runner
+        from src.env_pursuit_evasion import PursuitEvasionEnv, AGENTS
+        from src.models import load_policy
+        env = PursuitEvasionEnv(num_envs=1, env_cfg=env_cfg, obs_cfg=obs_cfg,
+                                reward_cfg=reward_cfg, command_cfg=command_cfg, show_viewer=True)
+        model = os.path.join(log_dir, f"model_{cfg.c}.pt")
+        obs = env.get_observations()
+        policies = {a: load_policy(model, obs, env.num_actions, agent=a) for a in AGENTS}
+        with torch.no_grad():
+            for _ in range(int(cfg.t / (env.dt * env.decimation))):
+                obs, _, dones, extras = env.step(policies["pursuer"](obs), policies["evader"](obs))
+                if dones.any():
+                    print(*(k for k, v in extras["outcomes"].items() if v))
+        return
     else:
         raise ValueError(f"unknown env: {task_name}")
 

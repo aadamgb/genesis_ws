@@ -1,22 +1,22 @@
-# nav (src/env_nav.py): a high-level MLP gives waypoints to a frozen evader (robust_goto) policy to reach goals
-# (yellow) in a 10 x 10 x 3 m region, inside a 12 x 12 x 5 m safety box (red). The low-level run's cfgs.pkl gives
-# the drone, controller, dt and randomization; the env keys below override its env config.
+# nav_pursuer (src/env_nav.py): a high-level MLP gives waypoints for the rod center to a frozen pursuer (rod2) policy to
+# reach goals (yellow) in a 10 x 10 x 3 m region, inside a 12 x 12 x 5 m safety box (red) that the drones and the rod
+# must stay in. The low-level run's cfgs.pkl gives the drones, rod, controller, dt and randomization; the env keys
+# below override its env config.
 defaults:
-  - override /drone@_global_.drone: general_evader   # log dir name only, the drone comes from the low-level run
+  - override /drone@_global_.drone: general_pursuer   # log dir name only, the drones come from the low-level run
 
-name: nav
+name: nav_pursuer
+num_envs: 4096   # B default: the rod scene is expensive, the high-level problem small
 
 env:
-  low_level: logs/robust_goto/SRT_general_R5_rerand_upset/model_1999.pt
-  num_actions: 4            # low-level actions
+  low_level: logs/rod2/SRT_general_R2D_B128k/model_5300.pt
   decimation: 10            # low-level steps per waypoint (80 ms at dt 0.008)
-  waypoint_range: 1.5       # [m] half side of the waypoint cube around the drone
+  waypoint_range: 1.5       # [m] half side of the waypoint cube around the rod center
   safety_box: [[-6.0, 6.0], [-6.0, 6.0], [0.0, 5.0]]   # [m] x, y, z bounds, leaving it terminates
-  termination_if_close_to_ground: 0.1   # [m]
+  termination_if_close_to_ground: 0.1   # [m] a drone or the rod
   goal_threshold: 0.3       # [m]
   episode_length_s: 30.0
-  upset: {}
-  rerandomize: {fraction: 0.0}
+  upset: {fraction: 0.0, tilt: 0.0, ang_vel: 0.0, lin_vel: 0.0}   # no upset starts
   visualize_target: ${v}
   visualize_camera: false
   max_visualize_FPS: 60
@@ -27,9 +27,9 @@ reward:
   reward_scales:   # per high-level step
     progress: 1.0   # per m closer to the goal
     reach: 10.0     # per goal reached
-    crash: -10.0    # ground or safety box
+    crash: -10.0    # ground, safety box or a pursuer failure (rod tilt, drones too close)
 
-command:   # goal and spawn region [m]
+command:   # goal and spawn region of the rod center [m]
   num_commands: 3
   pos_x_range: [-5.0, 5.0]
   pos_y_range: [-5.0, 5.0]
@@ -65,7 +65,7 @@ rsl_rl:
   obs_groups:
     actor: [policy]
     critic: [policy]
-  num_steps_per_env: 32
+  num_steps_per_env: 16
   save_interval: 100
   run_name: ${e}
   logger: tensorboard

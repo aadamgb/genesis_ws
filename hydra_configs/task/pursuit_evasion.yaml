@@ -1,0 +1,79 @@
+# pursuit_evasion (src/env_pursuit_evasion.py, train with train_marl.py): the pursuer system (two drones carrying a rod
+# with a net) guards a hemisphere, a greedy evader drone flies from outside to a target inside it; two high-level
+# MLPs give waypoints to their frozen low-level policies and are trained together (two PPOs, centralized critics).
+defaults:
+  - override /drone@_global_.drone: general_pursuer   # log dir name only, the drones come from the low-level runs
+
+name: pursuit_evasion
+num_envs: 4096   # B default
+
+env:
+  pursuer_low_level: logs/rod2/SRT_general_R2D_B128k/model_5300.pt        # its cfgs.pkl: drones, rod, controller, dt
+  evader_low_level: logs/robust_goto/SRT_general_R5_rerand_upset/model_1999.pt
+  decimation: 10            # low-level steps per waypoint (80 ms at dt 0.008)
+  waypoint_range: 1.5       # [m] half side of the waypoint cube around the rod center / the evader
+  safety_box: [[-15.0, 15.0], [-15.0, 15.0], [0.0, 10.0]]   # [m] x, y, z bounds, leaving it is a crash
+  hemisphere: {center: [0.0, 0.0, 0.0], radius: 10.0}   # [m] the chase starts when the evader enters it
+  evader_spawn: {distance: [12.0, 15.0], z: [1.0, 3.0]}  # [m] horizontal distance from the center, height
+  evader_target: {radius: 2.0, z: [1.0, 2.5]}          # [m] cylinder around the hemisphere axis
+  net_depth: 2.0            # [m] net below the rod, as wide as the rod
+  goal_threshold: 0.3       # [m] evader at its target
+  termination_if_close_to_ground: 0.1   # [m] a drone or the rod
+  episode_length_s: 60.0
+  vel_scale: 0.2            # [s/m] velocity observations
+  upset: {fraction: 0.0, tilt: 0.0, ang_vel: 0.0, lin_vel: 0.0}   # the pursuer starts at home
+  visualize_target: ${v}
+  visualize_camera: false
+  max_visualize_FPS: 60
+
+obs: {}   # the low-level observation configs come from their cfgs.pkl
+
+reward:   # per high-level step
+  pursuer:
+    home: -1.0             # per m s away from home before the chase
+    approach: 1.0          # per m closer to the evader during the chase
+    catch: 10.0
+    evader_reached: -10.0
+    crash: -10.0           # ground, safety box or a pursuer failure (rod tilt, drones too close)
+  evader:
+    progress: 1.0          # per m closer to the target
+    reach: 10.0
+    caught: -10.0
+    crash: -10.0           # ground or safety box
+
+command:
+  num_commands: 3
+
+rsl_rl:   # shared by both agents, except obs_groups
+  algorithm:
+    class_name: PPO
+    clip_param: 0.2
+    desired_kl: 0.01
+    entropy_coef: 0.004
+    gamma: 0.99
+    lam: 0.95
+    learning_rate: 0.0003
+    max_grad_norm: 1.0
+    num_learning_epochs: 5
+    num_mini_batches: 4
+    schedule: fixed
+    use_clipped_value_loss: true
+    value_loss_coef: 1.0
+  actor:
+    class_name: MLPModel
+    hidden_dims: [128, 128]
+    activation: tanh
+    distribution_cfg:
+      class_name: GaussianDistribution
+      init_std: 0.5
+      std_type: scalar
+  critic:
+    class_name: MLPModel
+    hidden_dims: [256, 256]
+    activation: tanh
+  obs_groups:   # per agent; both critics see the joint state
+    pursuer: {actor: [pursuer], critic: [critic]}
+    evader: {actor: [evader], critic: [critic]}
+  num_steps_per_env: 16
+  save_interval: 100
+  run_name: ${e}
