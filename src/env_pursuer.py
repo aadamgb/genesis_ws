@@ -99,7 +99,7 @@ class PursuerEnv:
         self.debug_objs = []  # drawn by _draw
         if self.visualize:
             self.target = self.scene.add_entity(
-                morph=gs.morphs.Mesh(file="meshes/sphere.obj", scale=0.05, fixed=False, collision=False),
+                morph=gs.morphs.Mesh(file="meshes/sphere.obj", scale=0.1, fixed=False, collision=False),
                 surface=gs.surfaces.Rough(diffuse_texture=gs.textures.ColorTexture(color=self.target_color)),
             )
             # visual only: the net hangs from the rod (the cloth does not act on the rigid bodies)

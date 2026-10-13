@@ -1,7 +1,7 @@
 # evader (src/env_evader.py, was robust_goto on des-inf-dom-rand): one general drone (design-informed, tinywhoop to 5 kg)
 # goes to waypoints; SRT, gamma 0.999, B 32768 / 8 mini-batches, [256, 256, 128], encoder on the drone parameters, tilt
-# termination off, 10-40 ms delay, a 4 m start / target plane, optional upset starts, mid-episode drone changes and
-# encoder parameter noise.
+# termination off, 10-40 ms delay, no ground, waypoints (position + heading) in a ball around the drone, optional upset
+# starts, mid-episode drone changes and encoder parameter noise.
 defaults:
   - override /drone@_global_.drone: general_evader
 
@@ -13,14 +13,11 @@ env:
   controller_type: SRT
   termination_if_roll_greater_than: 180   # [deg] off: the policy learns to recover
   termination_if_pitch_greater_than: 180  # [deg]
-  termination_if_close_to_ground: 0.1     # [m]
-  termination_if_x_greater_than: 3.0      # [m] from the target
-  termination_if_y_greater_than: 3.0
-  termination_if_z_greater_than: 3.0
-  base_init_pos: [0.0, 0.0, 4.0]          # [m] on the target plane
+  base_init_pos: [0.0, 0.0, 4.0]          # [m]
   base_init_quat: [1.0, 0.0, 0.0, 0.0]
   episode_length_s: 15.0
-  at_target_threshold: 0.2
+  at_target_threshold: 0.2       # [m]
+  at_target_yaw_threshold: 10.0  # [deg]
   drone: ${drone}
   domain_rand:
     enabled: true
@@ -39,7 +36,7 @@ env:
   # body rates up to +- ang_vel per axis
   upset:
     fraction: 0.0
-    heights: [3.0, 6.0]   # [m] below / above the target plane
+    heights: [3.0, 6.0]   # [m]
     ang_vel: 5.0          # [rad/s]
   # mid-episode drone change: this fraction of the episodes gets a new drone at a uniformly random step
   rerandomize:
@@ -52,8 +49,7 @@ env:
 obs:
   history: 4
   params: true
-  obs_scales:
-    rel_pos: 0.3333333333333333
+  obs_scales:   # the waypoint is scaled by 1 / command.radius
     lin_vel: 0.3333333333333333
     ang_vel:  0.31831015504887655
   obs_noise:   # gaussian std in physical units
@@ -67,15 +63,14 @@ obs:
 reward:
   reward_scales:
     target: 10.0
+    yaw: 5.0   # per rad^2 of heading error progress
     smooth: -0.005
     angular: -0.008
     crash: -10.0
 
 command:
-  num_commands: 3
-  pos_x_range: [-1.0, 1.0]
-  pos_y_range: [-1.0, 1.0]
-  pos_z_range: [4.0, 4.0]
+  num_commands: 4   # x, y, z [m] world, yaw [rad]
+  radius: 3.0       # [m] waypoints uniform in this ball around the drone; the episode ends beyond 2 x radius
 
 rsl_rl:
   algorithm:

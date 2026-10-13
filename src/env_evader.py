@@ -1,5 +1,10 @@
 """evader (was robust_goto on des-inf-dom-rand): one design-informed general drone goes to waypoints, encoder on the
-drone parameters, with, all optional (hydra_configs/task/evader.yaml):
+drone parameters (hydra_configs/task/evader.yaml).
+
+Each waypoint is a position, uniform in a ball of radius command.radius around the drone, and a uniform random
+heading; it is reached within env.at_target_threshold [m] and env.at_target_yaw_threshold [deg]. There is no ground:
+the episode ends when the drone is farther than 2 x radius from the waypoint. The policy sees the waypoint in the
+body frame, the attitude as a rotation matrix and the heading error. All optional:
 
     env.upset:        {fraction, heights, ang_vel}  a fraction of the episodes starts at a uniformly random
                       attitude (upside down included) with random body rates, at one of heights [m]
@@ -18,6 +23,7 @@ import genesis as gs
 from genesis.utils.geom import (
     quat_to_xyz,
     xyz_to_quat,
+    quat_to_R,
     transform_by_quat,
     inv_quat,
     transform_quat_by_quat,
@@ -28,6 +34,16 @@ from utils.design_informed_dr import DesignInformedDR
 
 def gs_rand_float(lower, upper, shape, device):
     return (upper - lower) * torch.rand(size=shape, device=device) + lower
+
+
+def wrap_angle(a):
+    """Angle [rad] wrapped to [-pi, pi)."""
+    return torch.remainder(a + math.pi, 2.0 * math.pi) - math.pi
+
+
+def yaw_of(quat):
+    """Yaw [rad] of world-frame quaternions (w, x, y, z)."""
+    return quat_to_xyz(quat, rpy=True)[:, 2]
 
 
 class EvaderEnv:
@@ -50,6 +66,8 @@ class EvaderEnv:
         self.command_cfg = command_cfg
 
         self.obs_scales = obs_cfg["obs_scales"]
+        # waypoint ball radius [m]; the observed waypoint is scaled by it and the episode ends beyond 2 radius
+        self.radius = command_cfg["radius"]
         self.reward_scales = copy.deepcopy(reward_cfg["reward_scales"])
 
         # drone (hydra_configs/drone) with design-informed randomization of its parameters
@@ -76,21 +94,22 @@ class EvaderEnv:
             show_viewer=show_viewer,
         )
 
-        # add plane
-        self.scene.add_entity(gs.morphs.Plane())
+        # ground plane for visualization only: no collision, the drone flies through it
+        if show_viewer or self.env_cfg["visualize_camera"]:
+            self.scene.add_entity(gs.morphs.Plane(collision=False))
 
         # add target
         if self.env_cfg["visualize_target"]:
             self.target = self.scene.add_entity(
                 morph=gs.morphs.Mesh(
                     file="meshes/sphere.obj",
-                    scale=0.05,
+                    scale=0.1,
                     fixed=False,
                     collision=False,
                 ),
                 surface=gs.surfaces.Rough(
                     diffuse_texture=gs.textures.ColorTexture(
-                        color=(1.0, 0.5, 0.5),
+                        color=(0.0, 1.0, 0.0),
                     ),
                 ),
             )
@@ -149,6 +168,8 @@ class EvaderEnv:
         self.base_lin_vel = torch.zeros((self.num_envs, 3), device=gs.device, dtype=gs.tc_float)
         self.base_ang_vel = torch.zeros((self.num_envs, 3), device=gs.device, dtype=gs.tc_float)
         self.last_base_pos = torch.zeros_like(self.base_pos)
+        self.base_yaw = torch.zeros((self.num_envs,), device=gs.device, dtype=gs.tc_float)  # [rad]
+        self.last_base_yaw = torch.zeros_like(self.base_yaw)
 
         # motor lag: first-order rpm response with separate spin-up / spin-down time constants
         # (domain_rand.motor_tau), like Gazebo's MulticopterMotorModel. tau = 0 means the rpm follows
@@ -185,7 +206,7 @@ class EvaderEnv:
         # observation history: the policy sees the current frame followed by the previous history-1
         # frames (newest first, one per env step); after a reset it is filled with the first frame
         self.obs_history = obs_cfg.get("history", 1)
-        self.frame_size = 13 + self.num_actions
+        self.frame_size = 19 + self.num_actions
         self.obs_hist = torch.zeros((self.num_envs, self.obs_history, self.frame_size), device=gs.device, dtype=gs.tc_float)
         self.obs_hist_empty = torch.ones((self.num_envs,), device=gs.device, dtype=torch.bool)
 
@@ -216,9 +237,21 @@ class EvaderEnv:
         self.reset()
 
     def _resample_commands(self, envs_idx):
-        self.commands[envs_idx, 0] = gs_rand_float(*self.command_cfg["pos_x_range"], (len(envs_idx),), gs.device)
-        self.commands[envs_idx, 1] = gs_rand_float(*self.command_cfg["pos_y_range"], (len(envs_idx),), gs.device)
-        self.commands[envs_idx, 2] = gs_rand_float(*self.command_cfg["pos_z_range"], (len(envs_idx),), gs.device)
+        """Waypoints (x, y, z [m] world, yaw [rad]): uniform in the ball of radius self.radius around the drone,
+        uniform heading."""
+        n = len(envs_idx)
+        direction = torch.randn((n, 3), device=gs.device, dtype=gs.tc_float)
+        direction = direction / direction.norm(dim=1, keepdim=True)
+        r = self.radius * torch.rand((n, 1), device=gs.device, dtype=gs.tc_float).pow(1.0 / 3.0)
+        self.commands[envs_idx, :3] = self.base_pos[envs_idx] + r * direction
+        self.commands[envs_idx, 3] = gs_rand_float(-math.pi, math.pi, (n,), gs.device)
+
+    def _update_errors(self):
+        """Waypoint errors of the current and the previous step, both to the current waypoint (world frame)."""
+        self.rel_pos = self.commands[:, :3] - self.base_pos
+        self.last_rel_pos = self.commands[:, :3] - self.last_base_pos
+        self.yaw_err = wrap_angle(self.commands[:, 3] - self.base_yaw)
+        self.last_yaw_err = wrap_angle(self.commands[:, 3] - self.last_base_yaw)
 
     def _motor_lag_coeffs(self, tau):
         """(alpha, k) for a first-order lag over one env step with the command held, tau: tensor [s].
@@ -266,7 +299,10 @@ class EvaderEnv:
 
     def _at_target(self):
         return (
-            (torch.norm(self.rel_pos, dim=1) < self.env_cfg["at_target_threshold"])
+            (
+                (torch.norm(self.rel_pos, dim=1) < self.env_cfg["at_target_threshold"])
+                & (torch.abs(self.yaw_err) < math.radians(self.env_cfg["at_target_yaw_threshold"]))
+            )
             .nonzero(as_tuple=False)
             .reshape((-1,))
         )
@@ -282,21 +318,25 @@ class EvaderEnv:
 
         # print(self.actions)
 
-        # update target pos
+        # update target pose: waypoint position and heading (its axes show in the viewer with i)
         if self.target is not None:
-            self.target.set_pos(self.commands, zero_velocity=True)
+            self.target.set_pos(self.commands[:, :3], zero_velocity=True)
+            yaw = self.commands[:, 3:4]
+            self.target.set_quat(xyz_to_quat(torch.cat([torch.zeros_like(yaw), torch.zeros_like(yaw), yaw], dim=1), rpy=True),
+                                 zero_velocity=True)
         self.scene.step()
 
         # update buffers
         self.episode_length_buf += 1
         self.last_base_pos[:] = self.base_pos[:]
         self.base_pos[:] = self.drone.get_pos()
-        self.rel_pos = self.commands - self.base_pos
-        self.last_rel_pos = self.commands - self.last_base_pos
         self.base_quat[:] = self.drone.get_quat()
         self.base_euler = quat_to_xyz(
             transform_quat_by_quat(self.inv_base_init_quat, self.base_quat), rpy=True, degrees=True
         )
+        self.last_base_yaw[:] = self.base_yaw
+        self.base_yaw[:] = yaw_of(self.base_quat)
+        self._update_errors()
         inv_base_quat = inv_quat(self.base_quat)
         self.base_lin_vel[:] = transform_by_quat(self.drone.get_vel(), inv_base_quat)
         self.base_ang_vel[:] = transform_by_quat(self.drone.get_ang(), inv_base_quat)
@@ -316,10 +356,7 @@ class EvaderEnv:
         self.crash_condition = (
             (torch.abs(self.base_euler[:, 1]) > self.env_cfg["termination_if_pitch_greater_than"])
             | (torch.abs(self.base_euler[:, 0]) > self.env_cfg["termination_if_roll_greater_than"])
-            | (torch.abs(self.rel_pos[:, 0]) > self.env_cfg["termination_if_x_greater_than"])
-            | (torch.abs(self.rel_pos[:, 1]) > self.env_cfg["termination_if_y_greater_than"])
-            | (torch.abs(self.rel_pos[:, 2]) > self.env_cfg["termination_if_z_greater_than"])
-            | (self.base_pos[:, 2] < self.env_cfg["termination_if_close_to_ground"])
+            | (torch.norm(self.rel_pos, dim=1) > 2.0 * self.radius)
         )
         self.reset_buf = (self.episode_length_buf > self.max_episode_length) | self.crash_condition
 
@@ -422,12 +459,16 @@ class EvaderEnv:
             )
 
     def _frame(self, rel_pos, quat, lin_vel, ang_vel):
+        """rel_pos: world-frame waypoint error [m], rotated to the (observed) body frame here; quat: (observed)
+        attitude; lin_vel, ang_vel: body frame [m/s, rad/s]."""
         return torch.cat(
             [
-                torch.clip(rel_pos * self.obs_scales["rel_pos"], -1, 1),
-                quat,
-                torch.clip(lin_vel * self.obs_scales["lin_vel"], -1, 1),
-                torch.clip(ang_vel * self.obs_scales["ang_vel"], -1, 1),
+                transform_by_quat(rel_pos, inv_quat(quat)) / self.radius,
+                quat_to_R(quat).reshape(-1, 9),  # body -> world, row-major
+                # wide clip: keeps the information up to 3x the scale, bounds the input of a tumbling drone
+                torch.clip(lin_vel * self.obs_scales["lin_vel"], -3, 3),
+                torch.clip(ang_vel * self.obs_scales["ang_vel"], -3, 3),
+                wrap_angle(self.commands[:, 3:4] - yaw_of(quat).unsqueeze(1)) / math.pi,
                 self.last_actions,
             ],
             axis=-1,
@@ -586,8 +627,9 @@ class EvaderEnv:
             self.episode_sums[key][envs_idx] = 0.0
 
         self._resample_commands(envs_idx)
-        self.rel_pos = self.commands - self.base_pos
-        self.last_rel_pos = self.commands - self.last_base_pos
+        self.base_yaw[envs_idx] = yaw_of(self.base_quat[envs_idx])
+        self.last_base_yaw[envs_idx] = self.base_yaw[envs_idx]
+        self._update_errors()
 
     def reset(self):
         self.reset_buf[:] = True
@@ -613,10 +655,8 @@ class EvaderEnv:
         return smooth_rew
 
     def _reward_yaw(self):
-        yaw = self.base_euler[:, 2]
-        yaw = torch.where(yaw > 180, yaw - 360, yaw) / 180 * 3.14159  # use rad for yaw_reward
-        yaw_rew = torch.exp(self.reward_cfg["yaw_lambda"] * torch.abs(yaw))
-        return yaw_rew
+        # heading progress, like _reward_target [rad^2]
+        return torch.square(self.last_yaw_err) - torch.square(self.yaw_err)
 
     def _reward_angular(self):
         angular_rew = torch.norm(self.base_ang_vel / 3.14159, dim=1)
