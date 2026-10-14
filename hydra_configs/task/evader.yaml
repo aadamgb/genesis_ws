@@ -20,6 +20,7 @@ env:
   base_init_pos: [0.0, 0.0, 4.0]          # [m] on the target plane
   base_init_quat: [1.0, 0.0, 0.0, 0.0]
   episode_length_s: 15.0
+  auto_reset: true   # false: the terminal observation is returned and the caller resets (r2dreamer), see step()
   at_target_threshold: 0.2
   drone: ${drone}
   domain_rand:

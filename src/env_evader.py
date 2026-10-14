@@ -43,6 +43,8 @@ class EvaderEnv:
         # policy can run there with identical hold times
         self.dt = env_cfg.get("dt", 0.01)
         self.max_episode_length = math.ceil(env_cfg["episode_length_s"] / self.dt)
+        # reset ended episodes inside step (rsl_rl) or let the caller do it one step later (r2dreamer), see step()
+        self.auto_reset = env_cfg.get("auto_reset", True)
 
         self.env_cfg = env_cfg
         self.obs_cfg = obs_cfg
@@ -301,7 +303,17 @@ class EvaderEnv:
         self.base_lin_vel[:] = transform_by_quat(self.drone.get_vel(), inv_base_quat)
         self.base_ang_vel[:] = transform_by_quat(self.drone.get_ang(), inv_base_quat)
 
-    def step(self, actions):
+    def step(self, actions, reset_envs=None):
+        """One control step for all envs.
+
+        env.auto_reset true (default, rsl_rl): crashed and timed-out envs are reset inside this step and their
+        observation is the first one of the next episode. false (r2dreamer, which needs the terminal observation):
+        they are not, the observation, reward and reset_buf of the step that ends the episode are returned as they
+        are, and the caller resets them by passing reset_envs (bool, (num_envs,)) in the next call. Those envs are
+        reset after that step's physics: their observation is the first one of the new episode, their reward 0 and
+        their reset_buf false."""
+        if reset_envs is not None and self.auto_reset:
+            raise ValueError("reset_envs is only used with env.auto_reset false")
         self._sim_step(actions)
 
         # mid-episode drone change
@@ -327,7 +339,8 @@ class EvaderEnv:
         self.extras["time_outs"] = torch.zeros_like(self.reset_buf, device=gs.device, dtype=gs.tc_float)
         self.extras["time_outs"][time_out_idx] = 1.0
 
-        self.reset_idx(self.reset_buf.nonzero(as_tuple=False).reshape((-1,)))
+        if self.auto_reset:
+            self.reset_idx(self.reset_buf.nonzero(as_tuple=False).reshape((-1,)))
 
         # compute reward
         self.rew_buf[:] = 0.0
@@ -339,7 +352,14 @@ class EvaderEnv:
         # the observation carries the action just applied, as rl_goto.cpp does (it used to carry the one
         # before, one step older than at deployment)
         self.last_actions[:] = self.actions[:]
-        self.last_actions[self.reset_buf.bool()] = 0.0  # a new episode starts from zero, like rl_goto on activation
+        if self.auto_reset:
+            self.last_actions[self.reset_buf.bool()] = 0.0  # a new episode starts from zero, like rl_goto on activation
+        elif reset_envs is not None and reset_envs.any():
+            # deferred reset of the envs whose episode ended at the previous step (this step was a junk one for them)
+            self.reset_idx(reset_envs.nonzero(as_tuple=False).reshape((-1,)))
+            self.rew_buf[reset_envs] = 0.0
+            self.reset_buf[reset_envs] = False
+            self.extras["time_outs"][reset_envs] = 0.0
 
         # compute observations
         self._step_obs_bias()
