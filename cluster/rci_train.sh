@@ -12,7 +12,7 @@
 #   NOTES=runs/notes/R2D_base.md sbatch --partition=gpu --time=12:00:00 --mem=64G --job-name=R2D_base cluster/rci_train.sh task=pursuer B=32768
 
 source /etc/profile
-PY=/mnt/personal/elghaada/envs/rl/bin/python
+PY=${PY:-/mnt/personal/elghaada/envs/rl/bin/python}
 
 nvidia-smi
 $PY train.py e="$SLURM_JOB_NAME" "$@" &
