@@ -1,0 +1,211 @@
+<?xml version="1.0" ?>
+
+<!-- general.urdf (des-inf-dom-rand) with a rigid rope for the pursuer task: a universal joint 5 cm below the COM, a
+     rigid link (nominal 0.6 m, stretched per env to task env.rope.length by src/env_pursuer.py) and a spherical joint
+     at its end, whose last link (rope_tip) the rod is welded to. Genesis' urdf has no spherical joint: both are
+     revolute hinges with light gimbal links. The top joint has no twist hinge: with a ball at the bottom it would only
+     spin the rope about its own axis.
+     General quadrotor for wide domain randomization: two crossed arms and four motor spheres.
+     The drone parameters and their randomization ranges are in hydra_configs/drone/general.yaml, whose
+     nominals are written into Genesis at build. kf and km are in <properties> because Genesis needs them to
+     load. Front motors red, back motors black. -->
+
+<robot name="general_rigid_rope">
+
+  <properties kf="4.5e-8" km="5.4e-10" />
+
+  <link name="base_link">
+
+    <inertial>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia ixx="0.01" ixy="0.0" ixz="0.0" iyy="0.01" iyz="0.0" izz="0.016"/>
+    </inertial>
+
+    <visual>
+      <origin rpy="0 1.570796 0.785398" xyz="0 0 0"/>
+      <geometry>
+        <cylinder radius="0.01" length="0.4"/>
+      </geometry>
+      <material name="grey"><color rgba="0.5 0.5 0.5 1"/></material>
+    </visual>
+
+    <visual>
+      <origin rpy="0 1.570796 -0.785398" xyz="0 0 0"/>
+      <geometry>
+        <cylinder radius="0.01" length="0.4"/>
+      </geometry>
+      <material name="grey"><color rgba="0.5 0.5 0.5 1"/></material>
+    </visual>
+
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <cylinder radius="0.05" length="0.04"/>
+      </geometry>
+    </collision>
+
+  </link>
+
+  <!-- Rotors as on the a300/x500: 0 front right (ccw), 1 back left (ccw), 2 front left (cw), 3 back right (cw),
+       so propellers_spin=(-1, -1, 1, 1). Thrust is applied at each prop link's inertial origin. -->
+  <link name="prop0_link">
+    <inertial>
+      <origin rpy="0 0 0" xyz="0.141421 -0.141421 0"/>
+      <mass value="0"/>
+      <inertia ixx="0" ixy="0" ixz="0" iyy="0" iyz="0" izz="0"/>
+    </inertial>
+    <visual>
+      <origin rpy="0 0 0" xyz="0.141421 -0.141421 0"/>
+      <geometry>
+        <sphere radius="0.03"/>
+      </geometry>
+      <material name="red"><color rgba="0.8 0.1 0.1 1"/></material>
+    </visual>
+  </link>
+  <joint name="prop0_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="prop0_link"/>
+  </joint>
+
+  <link name="prop1_link">
+    <inertial>
+      <origin rpy="0 0 0" xyz="-0.141421 0.141421 0"/>
+      <mass value="0"/>
+      <inertia ixx="0" ixy="0" ixz="0" iyy="0" iyz="0" izz="0"/>
+    </inertial>
+    <visual>
+      <origin rpy="0 0 0" xyz="-0.141421 0.141421 0"/>
+      <geometry>
+        <sphere radius="0.03"/>
+      </geometry>
+      <material name="black"><color rgba="0.1 0.1 0.1 1"/></material>
+    </visual>
+  </link>
+  <joint name="prop1_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="prop1_link"/>
+  </joint>
+
+  <link name="prop2_link">
+    <inertial>
+      <origin rpy="0 0 0" xyz="0.141421 0.141421 0"/>
+      <mass value="0"/>
+      <inertia ixx="0" ixy="0" ixz="0" iyy="0" iyz="0" izz="0"/>
+    </inertial>
+    <visual>
+      <origin rpy="0 0 0" xyz="0.141421 0.141421 0"/>
+      <geometry>
+        <sphere radius="0.03"/>
+      </geometry>
+      <material name="red"><color rgba="0.8 0.1 0.1 1"/></material>
+    </visual>
+  </link>
+  <joint name="prop2_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="prop2_link"/>
+  </joint>
+
+  <link name="prop3_link">
+    <inertial>
+      <origin rpy="0 0 0" xyz="-0.141421 -0.141421 0"/>
+      <mass value="0"/>
+      <inertia ixx="0" ixy="0" ixz="0" iyy="0" iyz="0" izz="0"/>
+    </inertial>
+    <visual>
+      <origin rpy="0 0 0" xyz="-0.141421 -0.141421 0"/>
+      <geometry>
+        <sphere radius="0.03"/>
+      </geometry>
+      <material name="black"><color rgba="0.1 0.1 0.1 1"/></material>
+    </visual>
+  </link>
+  <joint name="prop3_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="prop3_link"/>
+  </joint>
+
+  <!-- top: universal joint (y then x) 5 cm below the COM -->
+  <link name="rope_top">
+    <inertial>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <mass value="0.002"/>
+      <inertia ixx="1e-7" ixy="0" ixz="0" iyy="1e-7" iyz="0" izz="1e-7"/>
+    </inertial>
+  </link>
+  <joint name="rope_top_y" type="revolute">
+    <parent link="base_link"/>
+    <child link="rope_top"/>
+    <origin rpy="0 0 0" xyz="0 0 -0.05"/>
+    <axis xyz="0 1 0"/>
+    <limit effort="10" lower="-3.14" upper="3.14" velocity="3"/>
+    <dynamics damping="0.1" friction="0.0"/>
+  </joint>
+
+  <!-- rigid rope, 0.6 m, 20 g (inertia of a thin rod about its center: m L^2 / 12); no visual: its length is set per
+       env, src/env_pursuer.py draws it -->
+  <link name="rope">
+    <inertial>
+      <origin rpy="0 0 0" xyz="0 0 -0.3"/>
+      <mass value="0.02"/>
+      <inertia ixx="6e-4" ixy="0" ixz="0" iyy="6e-4" iyz="0" izz="1e-7"/>
+    </inertial>
+  </link>
+  <joint name="rope_top_x" type="revolute">
+    <parent link="rope_top"/>
+    <child link="rope"/>
+    <origin rpy="0 0 0" xyz="0 0 0"/>
+    <axis xyz="1 0 0"/>
+    <limit effort="10" lower="-3.14" upper="3.14" velocity="3"/>
+    <dynamics damping="0.1" friction="0.0"/>
+  </joint>
+
+  <!-- bottom: spherical joint at the rope end, x (sideways swing) then y (along the rod, bounded by the rope angle
+       termination, so the middle hinge stays away from gimbal lock) then z (twist) -->
+  <link name="rope_bottom_x">
+    <inertial>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <mass value="0.002"/>
+      <inertia ixx="1e-7" ixy="0" ixz="0" iyy="1e-7" iyz="0" izz="1e-7"/>
+    </inertial>
+  </link>
+  <joint name="rope_bottom_x" type="revolute">
+    <parent link="rope"/>
+    <child link="rope_bottom_x"/>
+    <origin rpy="0 0 0" xyz="0 0 -0.6"/>
+    <axis xyz="1 0 0"/>
+    <limit effort="10" lower="-3.14" upper="3.14" velocity="3"/>
+    <dynamics damping="0.1" friction="0.0"/>
+  </joint>
+  <link name="rope_bottom_y">
+    <inertial>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <mass value="0.002"/>
+      <inertia ixx="1e-7" ixy="0" ixz="0" iyy="1e-7" iyz="0" izz="1e-7"/>
+    </inertial>
+  </link>
+  <joint name="rope_bottom_y" type="revolute">
+    <parent link="rope_bottom_x"/>
+    <child link="rope_bottom_y"/>
+    <origin rpy="0 0 0" xyz="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit effort="10" lower="-3.14" upper="3.14" velocity="3"/>
+    <dynamics damping="0.1" friction="0.0"/>
+  </joint>
+  <link name="rope_tip">
+    <inertial>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <mass value="0.002"/>
+      <inertia ixx="1e-7" ixy="0" ixz="0" iyy="1e-7" iyz="0" izz="1e-7"/>
+    </inertial>
+  </link>
+  <joint name="rope_bottom_z" type="revolute">
+    <parent link="rope_bottom_y"/>
+    <child link="rope_tip"/>
+    <origin rpy="0 0 0" xyz="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit effort="10" lower="-3.14" upper="3.14" velocity="3"/>
+    <dynamics damping="0.1" friction="0.0"/>
+  </joint>
+
+</robot>

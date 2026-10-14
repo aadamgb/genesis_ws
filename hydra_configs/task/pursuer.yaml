@@ -21,17 +21,17 @@ env:
 
   # sampled once per env at startup (log-uniform); the visual rod has the geometric-mean length
   rod:
-    length: [1.0, 3.0]    # [m], at least min_spacing x the larger arm + 2 tip_inset
+    length: [2.0, 3.0]    # [m], at least min_spacing x the larger arm + 2 tip_inset
     mass: [0.1, 2.0]      # [kg]
     radius: [0.01, 0.03]  # [m]
     tip_inset: 0.05       # [m] rope tips welded this far from the rod ends
     min_spacing: 3.0      # [-] drone spacing in arm lengths
-    tip_link: segment_5_cylinder
-  # sampled once per env at startup (uniform), base_link to the rod weld; the urdf rope (drone.rope_urdf) is stretched
-  # to it, the encoder gets log(length / middle of the range)
+    tip_link: rope_tip    # end of the rope's spherical joint (drone.rope_urdf)
+  # rigid rope, sampled once per env at startup (uniform): length between its joints (the top one 5 cm below the drone
+  # COM, the bottom one at the rod), the encoder gets log(length / middle of the range)
   rope:
-    length: [0.5, 1.5]    # [m]
-  min_system_twr: 1.5     # [-] max thrust of both drones / weight of drones + rod; the max rpm are raised to it
+    length: [0.3, 0.9]    # [m]
+  min_system_twr: 2.5     # [-] max thrust of both drones / weight of drones + rod; the max rpm are raised to it
 
   spawn_height: 2.5       # [m] rod center, on the target plane; the drones a rope length above
 
@@ -42,7 +42,7 @@ env:
   upset: {fraction: 0.3, tilt: 90.0, ang_vel: 4.0, lin_vel: 1.0}
 
   termination_if_rod_tilt_greater_than: 30   # [deg] rod axis from the horizontal
-  termination_if_rope_angle_greater_than: 30 # [deg] rope (rod weld to drone) from the perpendicular to the rod
+  termination_if_rope_angle_greater_than: 60 # [deg] rope from the perpendicular to the rod
   termination_if_tilt_greater_than: 180      # [deg] roll or pitch of a drone, 180 = off
   termination_if_close_to_ground: 0.1        # [m] a drone or the rod
   termination_if_xy_greater_than: 3.0        # [m] rod center from the target
