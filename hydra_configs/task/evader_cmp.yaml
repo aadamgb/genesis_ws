@@ -1,0 +1,12 @@
+# evader_cmp: the evader task (evader.yaml) simplified for the Dreamer vs PPO comparison: one nominal drone (the middle
+# design, c = 0.5) instead of design-informed randomization, fixed 18 ms action delay, exact hover estimate. Kept from
+# evader: initial state randomization, observation noise, rewards, PPO settings and the params observation (constant
+# here). Upset starts and mid-episode drone changes stay off. Both algorithms train on this exact config.
+defaults:
+  - evader@_here_
+  - _self_
+
+env:
+  domain_rand:
+    enabled: false              # nominal drone, motor efficiency 1, action delay = nominal
+    hover_estimate_noise: 0.0
